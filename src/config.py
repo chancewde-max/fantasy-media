@@ -67,9 +67,16 @@ class Config:
     anthropic_model: str
 
     # Delivery
+    post_target: str          # supabase | webhook | both
     webhook_provider: str
     webhook_url: str
     groupme_bot_id: str
+
+    # Supabase (feed database for the app)
+    supabase_url: str
+    supabase_service_key: str
+    supabase_league_id: str
+    supabase_bucket: str
 
     # Tone (per content type)
     tone_default: str
@@ -96,6 +103,12 @@ class Config:
 
         default_tone = _tone("TONE", "roast")
 
+        post_target = _get("POST_TARGET", "supabase").strip().lower()
+        if post_target not in {"supabase", "webhook", "both"}:
+            raise ConfigError(
+                f"POST_TARGET must be supabase|webhook|both, got {post_target!r}"
+            )
+
         cfg = cls(
             league_id=_get_int("LEAGUE_ID", 0),
             season=_get_int("SEASON", 0),
@@ -103,9 +116,14 @@ class Config:
             swid=_get("SWID", required=True),
             anthropic_api_key=_get("ANTHROPIC_API_KEY", required=True),
             anthropic_model=_get("ANTHROPIC_MODEL", "claude-sonnet-5"),
+            post_target=post_target,
             webhook_provider=provider,
             webhook_url=_get("WEBHOOK_URL", ""),
             groupme_bot_id=_get("GROUPME_BOT_ID", ""),
+            supabase_url=_get("SUPABASE_URL", ""),
+            supabase_service_key=_get("SUPABASE_SERVICE_KEY", ""),
+            supabase_league_id=_get("SUPABASE_LEAGUE_ID", ""),
+            supabase_bucket=_get("SUPABASE_BUCKET", "media"),
             tone_default=default_tone,
             tone_notifications=_tone("TONE_NOTIFICATIONS", default_tone),
             tone_tweets=_tone("TONE_TWEETS", default_tone),
@@ -121,10 +139,19 @@ class Config:
             raise ConfigError("LEAGUE_ID must be set")
         if cfg.season == 0:
             raise ConfigError("SEASON must be set")
-        if provider == "groupme":
-            if not cfg.groupme_bot_id:
-                raise ConfigError("GROUPME_BOT_ID is required when WEBHOOK_PROVIDER=groupme")
-        elif not cfg.webhook_url:
-            raise ConfigError("WEBHOOK_URL is required for discord/slack")
+        if post_target in {"supabase", "both"}:
+            if not cfg.supabase_url:
+                raise ConfigError("SUPABASE_URL is required when POST_TARGET includes supabase")
+            if not cfg.supabase_service_key:
+                raise ConfigError("SUPABASE_SERVICE_KEY is required when POST_TARGET includes supabase")
+            if not cfg.supabase_league_id:
+                raise ConfigError("SUPABASE_LEAGUE_ID is required when POST_TARGET includes supabase")
+
+        if post_target in {"webhook", "both"}:
+            if provider == "groupme":
+                if not cfg.groupme_bot_id:
+                    raise ConfigError("GROUPME_BOT_ID is required when WEBHOOK_PROVIDER=groupme")
+            elif not cfg.webhook_url:
+                raise ConfigError("WEBHOOK_URL is required for discord/slack")
 
         return cfg

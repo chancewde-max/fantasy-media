@@ -1,8 +1,11 @@
 """Wires everything together for one poll cycle.
 
-fetch -> detect -> de-dup -> generate -> deliver -> mark fired.
-Designed so one failure (a bad ESPN poll, a Claude hiccup) is logged and the
-scheduler keeps running.
+fetch -> detect -> de-dup -> generate -> publish -> mark fired,
+plus: pull manager tips -> Insider report -> publish.
+
+Publishing fans out to Supabase (the app feed) and/or a chat webhook,
+controlled by POST_TARGET. One failure (a bad ESPN poll, a Claude hiccup,
+a Supabase blip) is logged and the scheduler keeps running.
 """
 from __future__ import annotations
 
@@ -15,11 +18,13 @@ from .delivery import Delivery, DeliveryError
 from .espn_client import ESPNAuthError, ESPNClient, ESPNFetchError
 from .events import build_ranking_movement, detect_events
 from .generators.claude_client import ClaudeClient
+from .generators.insider import generate_insider_report
 from .generators.instagram import generate_instagram
 from .generators.notifications import generate_notification
 from .generators.rankings import generate_rankings
 from .generators.tweets import generate_tweet
 from .state import State
+from .supabase_writer import SupabaseError, SupabaseWriter
 
 log = logging.getLogger(__name__)
 
@@ -33,10 +38,29 @@ class Pipeline:
         self.espn = ESPNClient(cfg.league_id, cfg.season, cfg.espn_s2, cfg.swid)
         self.state = State(cfg.state_db)
         self.claude = ClaudeClient(cfg.anthropic_api_key, cfg.anthropic_model)
-        self.delivery = Delivery(cfg.webhook_provider, cfg.webhook_url, cfg.groupme_bot_id)
+
+        self.supabase = None
+        if cfg.post_target in {"supabase", "both"}:
+            self.supabase = SupabaseWriter(
+                cfg.supabase_url,
+                cfg.supabase_service_key,
+                cfg.supabase_league_id,
+                cfg.supabase_bucket,
+            )
+
+        self.delivery = None
+        if cfg.post_target in {"webhook", "both"}:
+            self.delivery = Delivery(
+                cfg.webhook_provider, cfg.webhook_url, cfg.groupme_bot_id
+            )
+
         os.makedirs(OUT_DIR, exist_ok=True)
 
+    # ------------------------------------------------------------------ cycle
     def run_once(self) -> None:
+        # Manager tips first — they don't depend on ESPN being reachable.
+        self._process_tips()
+
         try:
             snap = self.espn.fetch_snapshot()
         except ESPNAuthError as exc:
@@ -57,30 +81,62 @@ class Pipeline:
             try:
                 self._handle_event(event)
                 self.state.mark_fired(event.key)
-            except DeliveryError as exc:
-                log.error("Delivery failed for %s: %s", event.key, exc)
+            except (DeliveryError, SupabaseError) as exc:
+                log.error("Publish failed for %s: %s", event.key, exc)
                 # Not marked fired -> retried next cycle.
             except Exception as exc:  # noqa: BLE001
                 log.exception("Unexpected error handling %s: %s", event.key, exc)
 
-        # Power rankings once per week when standings are present.
         self._maybe_send_rankings(snap)
+
+    # -------------------------------------------------------------- publishing
+    def _publish(
+        self,
+        post_type: str,
+        body: str,
+        author_handle: str,
+        emoji: str,
+        image_path: str | None = None,
+        event_key: str | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        """Fan out one post to Supabase (feed) and/or the chat webhook."""
+        if self.supabase is not None:
+            self.supabase.insert_post(
+                post_type=post_type,
+                body=body,
+                author_handle=author_handle,
+                image_path=image_path,
+                event_key=event_key,
+                metadata=metadata,
+            )
+        if self.delivery is not None:
+            text = f"{emoji} {body}" if emoji else body
+            imgs = [image_path] if image_path else []
+            self.delivery.send(text, imgs)
 
     def _handle_event(self, event) -> None:
         cfg = self.cfg
+
         note = generate_notification(self.claude, event, cfg.tone_notifications)
+        self._publish(
+            "espn_notification", note, "ESPN", "🚨",
+            event_key=f"{event.key}:note", metadata=event.data,
+        )
 
-        # Notifications for every event.
-        self.delivery.send(note)
-
-        # Superlative events also get a tweet + IG post for extra flavor.
         if event.kind in {"blowout", "nailbiter", "high", "low", "matchup_final"}:
             tweet = generate_tweet(self.claude, event, cfg.tone_tweets)
-            self.delivery.send(f"🐦 @LeagueInsider\n{tweet}")
+            self._publish(
+                "tweet", tweet, "@LeagueInsider", "🐦",
+                event_key=f"{event.key}:tweet", metadata=event.data,
+            )
 
             ig = generate_instagram(self.claude, event, cfg.tone_instagram, OUT_DIR)
-            imgs = [ig["image_path"]] if ig.get("image_path") else []
-            self.delivery.send(f"📸 {ig['caption']}", imgs)
+            self._publish(
+                "instagram", ig["caption"], "@LeagueGram", "📸",
+                image_path=ig.get("image_path"),
+                event_key=f"{event.key}:ig", metadata=event.data,
+            )
 
     def _maybe_send_rankings(self, snap) -> None:
         if not snap.standings:
@@ -95,21 +151,56 @@ class Pipeline:
             result = generate_rankings(
                 self.claude, rows, snap.week, self.cfg.tone_rankings, OUT_DIR
             )
-            imgs = [result["image_path"]] if result.get("image_path") else []
-            self.delivery.send(f"📊 {result['blurb']}", imgs)
+            self._publish(
+                "instagram", result["blurb"], "@LeagueGram", "📊",
+                image_path=result.get("image_path"),
+                event_key=week_key, metadata={"week": snap.week, "rankings": rows},
+            )
             self.state.mark_fired(week_key)
             _save_prev_standings(snap.standings)
-        except DeliveryError as exc:
-            log.error("Failed to deliver rankings: %s", exc)
+        except (DeliveryError, SupabaseError) as exc:
+            log.error("Failed to publish rankings: %s", exc)
+
+    # -------------------------------------------------------------------- tips
+    def _process_tips(self) -> None:
+        """Pull pending manager tips, turn each into an anonymous Insider post."""
+        if self.supabase is None:
+            return
+        try:
+            tips = self.supabase.fetch_pending_tips()
+        except SupabaseError as exc:
+            log.error("Could not fetch tips: %s", exc)
+            return
+
+        for tip in tips:
+            try:
+                report = generate_insider_report(
+                    self.claude, tip["raw_text"], self.cfg.tone_default
+                )
+                self.supabase.insert_post(
+                    post_type="insider_report",
+                    body=report,
+                    author_handle="@LeagueInsider",
+                    event_key=f"tip:{tip['id']}",
+                    metadata={"source": "manager_tip"},
+                )
+                self.supabase.mark_tip(tip["id"], "published")
+                log.info("Published insider report from tip %s", tip["id"])
+            except SupabaseError as exc:
+                log.error("Failed to publish tip %s: %s", tip["id"], exc)
+            except Exception as exc:  # noqa: BLE001
+                log.exception("Unexpected error on tip %s: %s", tip["id"], exc)
 
     def _notify_auth_problem(self, detail: str) -> None:
+        msg = (
+            "⚠️ Fantasy media bot: your ESPN cookies need refreshing "
+            "(espn_s2 / SWID). Re-grab them from your browser and update config."
+        )
         try:
-            self.delivery.send(
-                "⚠️ Fantasy media bot: your ESPN cookies need refreshing "
-                "(espn_s2 / SWID). Re-grab them from your browser and update .env."
-            )
-        except DeliveryError as exc:
-            log.error("Could not even send auth-problem heads-up: %s", exc)
+            self._publish("espn_notification", msg, "System", "⚠️",
+                          event_key=None, metadata={"kind": "auth_error"})
+        except (DeliveryError, SupabaseError) as exc:
+            log.error("Could not send auth-problem heads-up: %s", exc)
 
 
 def _load_prev_standings():
