@@ -1,0 +1,31 @@
+# Secrets — never commit
+.env
+*.env
+!.env.example
+
+# State / data
+*.sqlite
+*.sqlite3
+*.db
+data/
+state.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Generated media
+out/
+generated/
+*.png
+!src/graphics/templates/*.png
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
