@@ -36,8 +36,22 @@ def run(cfg: Config) -> None:
         max_instances=1,
         coalesce=True,
     )
-    log.info("Scheduler started — polling every %d min. Ctrl-C to stop.",
-             cfg.poll_interval_minutes)
+    # The Insider posts once a day, publishing only rumors corroborated 2+ times.
+    scheduler.add_job(
+        _safe_insider,
+        "cron",
+        hour=cfg.insider_daily_hour,
+        minute=0,
+        args=[pipeline],
+        id="insider_daily",
+        max_instances=1,
+        coalesce=True,
+    )
+    log.info(
+        "Scheduler started — polling every %d min, Insider daily at %02d:00 UTC. "
+        "Ctrl-C to stop.",
+        cfg.poll_interval_minutes, cfg.insider_daily_hour,
+    )
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
@@ -49,3 +63,10 @@ def _safe_cycle(pipeline: Pipeline) -> None:
         pipeline.run_once()
     except Exception as exc:  # noqa: BLE001 - never let the scheduler die
         log.exception("Poll cycle raised, continuing: %s", exc)
+
+
+def _safe_insider(pipeline: Pipeline) -> None:
+    try:
+        pipeline.run_daily_insider()
+    except Exception as exc:  # noqa: BLE001 - never let the scheduler die
+        log.exception("Daily insider raised, continuing: %s", exc)

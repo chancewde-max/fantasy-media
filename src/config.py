@@ -89,6 +89,12 @@ class Config:
     poll_interval_minutes: int
     run_once: bool
 
+    # Insider + fan-reaction behavior
+    insider_min_corroboration: int
+    insider_daily_hour: int          # UTC hour for the daily Insider batch
+    fan_comments_per_post: int
+    reaction_tweets_per_report: int
+
     # Misc
     state_db: str
     log_level: str
@@ -131,6 +137,10 @@ class Config:
             tone_rankings=_tone("TONE_RANKINGS", "hype"),
             poll_interval_minutes=_get_int("POLL_INTERVAL", 60),
             run_once=_get_bool("RUN_ONCE", False),
+            insider_min_corroboration=_get_int("INSIDER_MIN_CORROBORATION", 2),
+            insider_daily_hour=_get_int("INSIDER_DAILY_HOUR", 9),
+            fan_comments_per_post=_get_int("FAN_COMMENTS_PER_POST", 2),
+            reaction_tweets_per_report=_get_int("REACTION_TWEETS_PER_REPORT", 3),
             state_db=_get("STATE_DB", "data/state.db"),
             log_level=_get("LOG_LEVEL", "INFO").upper(),
         )

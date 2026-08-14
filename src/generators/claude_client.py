@@ -53,6 +53,40 @@ class ClaudeClient:
             return _fallback(prompt)
 
 
+    def generate_json(self, system: str, prompt: str, tone: str, max_tokens: int = 600):
+        """Like generate(), but expects JSON back. Returns parsed data or None.
+
+        Never raises — on any parse/API failure returns None so callers can
+        fall back gracefully.
+        """
+        raw = self.generate(
+            system + "\n\nRespond with ONLY valid JSON, no prose, no code fences.",
+            prompt, tone, max_tokens=max_tokens,
+        )
+        return _parse_json(raw)
+
+
+def _parse_json(raw: str):
+    import json
+    import re
+
+    if not raw:
+        return None
+    # Strip code fences if the model added them anyway.
+    cleaned = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        # Last resort: grab the first {...} or [...] block.
+        match = re.search(r"(\[.*\]|\{.*\})", cleaned, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except json.JSONDecodeError:
+                return None
+        return None
+
+
 def _fallback(prompt: str) -> str:
     # Deterministic, never-crashes fallback: just echo the key facts.
     first_line = prompt.strip().splitlines()[0] if prompt.strip() else "Fantasy update"

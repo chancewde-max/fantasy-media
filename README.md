@@ -1,4 +1,4 @@
-# Fantasy League Media Ecosystem 🏈📱
+# Fantasy Media 🏈📱
 
 An always-on bot that watches your **private ESPN fantasy football league**,
 detects noteworthy weekly events, and auto-generates a fake "media ecosystem"

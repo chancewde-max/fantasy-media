@@ -18,10 +18,11 @@ from .delivery import Delivery, DeliveryError
 from .espn_client import ESPNAuthError, ESPNClient, ESPNFetchError
 from .events import build_ranking_movement, detect_events
 from .generators.claude_client import ClaudeClient
-from .generators.insider import generate_insider_report
+from .generators.insider import cluster_tips, generate_insider_report
 from .generators.instagram import generate_instagram
 from .generators.notifications import generate_notification
 from .generators.rankings import generate_rankings
+from .generators.reactions import generate_fan_comments, generate_reaction_tweets
 from .generators.tweets import generate_tweet
 from .state import State
 from .supabase_writer import SupabaseError, SupabaseWriter
@@ -58,9 +59,11 @@ class Pipeline:
 
     # ------------------------------------------------------------------ cycle
     def run_once(self) -> None:
-        # Manager tips first — they don't depend on ESPN being reachable.
-        self._process_tips()
+        """One ESPN poll cycle: detect events -> publish posts (+ fan reactions).
 
+        The Insider tip batch runs on its OWN daily schedule, not here — see
+        run_daily_insider().
+        """
         try:
             snap = self.espn.fetch_snapshot()
         except ESPNAuthError as exc:
@@ -99,10 +102,16 @@ class Pipeline:
         image_path: str | None = None,
         event_key: str | None = None,
         metadata: dict | None = None,
-    ) -> None:
-        """Fan out one post to Supabase (feed) and/or the chat webhook."""
+        with_fan_comments: bool = True,
+    ) -> str | None:
+        """Fan out one post to Supabase (feed) and/or the chat webhook.
+
+        Returns the created Supabase post id (or None). When a post lands in the
+        feed, seed a couple of AI fan comments so it feels alive.
+        """
+        post_id = None
         if self.supabase is not None:
-            self.supabase.insert_post(
+            post_id = self.supabase.insert_post(
                 post_type=post_type,
                 body=body,
                 author_handle=author_handle,
@@ -110,10 +119,26 @@ class Pipeline:
                 event_key=event_key,
                 metadata=metadata,
             )
+            if post_id and with_fan_comments and self.cfg.fan_comments_per_post > 0:
+                self._add_fan_comments(post_id, body)
         if self.delivery is not None:
             text = f"{emoji} {body}" if emoji else body
             imgs = [image_path] if image_path else []
             self.delivery.send(text, imgs)
+        return post_id
+
+    def _add_fan_comments(self, post_id: str, post_body: str) -> None:
+        try:
+            comments = generate_fan_comments(
+                self.claude, post_body, self.cfg.tone_default,
+                n=self.cfg.fan_comments_per_post,
+            )
+            for c in comments:
+                self.supabase.insert_fan_comment(post_id, c["handle"], c["text"])
+        except SupabaseError as exc:
+            log.warning("Could not add fan comments to %s: %s", post_id, exc)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Fan comment generation failed: %s", exc)
 
     def _handle_event(self, event) -> None:
         cfg = self.cfg
@@ -161,9 +186,15 @@ class Pipeline:
         except (DeliveryError, SupabaseError) as exc:
             log.error("Failed to publish rankings: %s", exc)
 
-    # -------------------------------------------------------------------- tips
-    def _process_tips(self) -> None:
-        """Pull pending manager tips, turn each into an anonymous Insider post."""
+    # ----------------------------------------------------------- daily insider
+    def run_daily_insider(self) -> None:
+        """Once-a-day batch: publish only rumors corroborated by 2+ managers.
+
+        Clusters pending tips; any cluster of size >= threshold becomes ONE
+        anonymous Insider report, followed by a few fan reaction tweets. Tips in
+        a published cluster are marked published; un-corroborated tips stay
+        pending so they can be matched by a future tip.
+        """
         if self.supabase is None:
             return
         try:
@@ -172,24 +203,63 @@ class Pipeline:
             log.error("Could not fetch tips: %s", exc)
             return
 
-        for tip in tips:
+        if not tips:
+            log.info("Daily insider: no pending tips.")
+            return
+
+        clusters = cluster_tips(
+            self.claude, tips, self.cfg.insider_min_corroboration
+        )
+        log.info(
+            "Daily insider: %d pending tips -> %d corroborated cluster(s).",
+            len(tips), len(clusters),
+        )
+
+        for cluster in clusters:
             try:
-                report = generate_insider_report(
-                    self.claude, tip["raw_text"], self.cfg.tone_default
-                )
-                self.supabase.insert_post(
-                    post_type="insider_report",
-                    body=report,
-                    author_handle="@LeagueInsider",
-                    event_key=f"tip:{tip['id']}",
-                    metadata={"source": "manager_tip"},
-                )
-                self.supabase.mark_tip(tip["id"], "published")
-                log.info("Published insider report from tip %s", tip["id"])
+                self._publish_insider_cluster(cluster)
             except SupabaseError as exc:
-                log.error("Failed to publish tip %s: %s", tip["id"], exc)
+                log.error("Failed to publish insider cluster: %s", exc)
             except Exception as exc:  # noqa: BLE001
-                log.exception("Unexpected error on tip %s: %s", tip["id"], exc)
+                log.exception("Unexpected error on insider cluster: %s", exc)
+
+    def _publish_insider_cluster(self, cluster: dict) -> None:
+        summary = cluster.get("summary") or "the latest league buzz"
+        report = generate_insider_report(self.claude, summary, self.cfg.tone_default)
+
+        # De-dup the report itself off the sorted tip ids in the cluster.
+        cluster_key = "insider:" + "+".join(sorted(cluster["tip_ids"]))
+        post_id = self._publish(
+            "insider_report", report, "@LeagueInsider", "🕵️",
+            event_key=cluster_key,
+            metadata={"source": "corroborated_tips", "corroboration": len(cluster["tip_ids"])},
+        )
+
+        # Mark all tips in the cluster as published, linked to the report.
+        for tip_id in cluster["tip_ids"]:
+            try:
+                self.supabase.mark_tip(tip_id, "published", post_id)
+            except SupabaseError as exc:
+                log.warning("Could not mark tip %s published: %s", tip_id, exc)
+
+        if post_id is None:
+            return  # duplicate report, don't spam reaction tweets again
+
+        # Fan/reporter reaction tweets talking about the report.
+        try:
+            tweets = generate_reaction_tweets(
+                self.claude, report, self.cfg.tone_default,
+                n=self.cfg.reaction_tweets_per_report,
+            )
+            for i, tw in enumerate(tweets):
+                self._publish(
+                    "tweet", tw["text"], tw["handle"], "🐦",
+                    event_key=f"{cluster_key}:reax{i}",
+                    metadata={"reacting_to": post_id},
+                    with_fan_comments=False,
+                )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Reaction tweet generation failed: %s", exc)
 
     def _notify_auth_problem(self, detail: str) -> None:
         msg = (

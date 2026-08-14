@@ -50,8 +50,8 @@ class SupabaseWriter:
         image_path: str | None = None,
         event_key: str | None = None,
         metadata: dict | None = None,
-    ) -> bool:
-        """Insert one feed post. Returns True if created, False if a duplicate.
+    ) -> str | None:
+        """Insert one feed post. Returns the new post id, or None if a duplicate.
 
         Raises SupabaseError on real failures (auth, network, bad request).
         """
@@ -74,22 +74,41 @@ class SupabaseWriter:
         }
         resp = requests.post(
             f"{self._base}/rest/v1/posts",
-            headers={**self._rest_headers, "Prefer": "return=minimal"},
+            headers={**self._rest_headers, "Prefer": "return=representation"},
             json=row,
             timeout=TIMEOUT,
         )
         if resp.status_code in (200, 201):
-            return True
+            data = resp.json()
+            return data[0]["id"] if isinstance(data, list) and data else None
         if resp.status_code == 409:
             # Unique violation on (league_id, event_key) -> already posted.
             log.info("Post already exists (event_key=%s), skipping.", event_key)
-            return False
+            return None
         if resp.status_code in (401, 403):
             raise SupabaseError(
                 "Supabase rejected the write — check SUPABASE_SERVICE_KEY "
                 f"({resp.status_code})."
             )
         raise SupabaseError(f"Insert failed {resp.status_code}: {resp.text[:200]}")
+
+    def insert_fan_comment(self, post_id: str, handle: str, body: str) -> None:
+        """Insert an AI-generated fan comment on a post (service role)."""
+        resp = requests.post(
+            f"{self._base}/rest/v1/comments",
+            headers={**self._rest_headers, "Prefer": "return=minimal"},
+            json={
+                "post_id": post_id,
+                "author_handle": handle,
+                "body": body,
+                "is_ai": True,
+            },
+            timeout=TIMEOUT,
+        )
+        if resp.status_code not in (200, 201, 204):
+            raise SupabaseError(
+                f"Fan comment insert failed {resp.status_code}: {resp.text[:200]}"
+            )
 
     # -------------------------------------------------------------- storage
     def _ensure_bucket(self) -> None:
