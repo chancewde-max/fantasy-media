@@ -12,8 +12,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Persist state + generated media across restarts by mounting these.
-VOLUME ["/app/data", "/app/out"]
+# State + generated media live in /app/data and /app/out. To persist them
+# across restarts:
+#   - Docker:  docker run -v $PWD/data:/app/data -v $PWD/out:/app/out ...
+#   - Railway: attach a Volume with mount path /app/data (Service > Settings > Volumes)
+# Railway does not support the Dockerfile VOLUME instruction, so it's omitted here.
 
 # Config comes from env / --env-file; nothing is baked into the image.
 CMD ["python", "main.py"]
