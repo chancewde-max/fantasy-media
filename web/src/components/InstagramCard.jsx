@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { supabase } from "../supabaseClient";
 
+// Stable-per-handle fake profile photo (a real-looking but not-a-real-person
+// stock face) so accounts feel like accounts, not initials in a circle.
+function avatarUrl(seed, size) {
+  return `https://i.pravatar.cc/${size}?u=${encodeURIComponent(seed)}`;
+}
+
 function timeAgo(iso) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (s < 60) return "just now";
@@ -95,7 +101,7 @@ export default function InstagramCard({ post, onChange }) {
     <article className="ig-card">
       <div className="ig-head">
         <span className="ig-avatar">
-          <span className="ig-avatar-inner">{handle[0]?.toUpperCase() || "L"}</span>
+          <img className="ig-avatar-inner" src={avatarUrl(handle, 64)} alt="" />
         </span>
         <span className="ig-username">{handle}</span>
         <span className="ig-dots">•••</span>

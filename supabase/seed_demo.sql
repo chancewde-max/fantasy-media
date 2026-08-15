@@ -14,7 +14,7 @@ ins as (
   from lg, (values
     ('espn_notification','ESPN',
      '🚨 Team Chaos drops 148.6 to bury Sofa Kings in a Week 3 blowout.'),
-    ('insider_report','@LeagueInsider',
+    ('insider_report','@DiannaRussinni',
      'Sources around the league tell me a certain 1-2 team is quietly shopping their RB1. Motivated seller. 👀'),
     ('tweet','@degen_danny',
      'no way Chaos put up 148 with their kicker on bye lmaooo #rigged'),

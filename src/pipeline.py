@@ -153,7 +153,7 @@ class Pipeline:
         if event.kind in {"blowout", "nailbiter", "high", "low", "matchup_final"}:
             tweet = generate_tweet(self.claude, event, cfg.tone_tweets)
             self._publish(
-                "tweet", tweet, "@LeagueInsider", "🐦",
+                "tweet", tweet, "@DiannaRussinni", "🐦",
                 event_key=f"{event.key}:tweet", metadata=event.data,
             )
 
@@ -220,7 +220,7 @@ class Pipeline:
 
         tip_key = f"insider:tip:{tip['id']}"
         post_id = self._publish(
-            "insider_report", report, "@LeagueInsider", "🕵️",
+            "insider_report", report, "@DiannaRussinni", "🕵️",
             event_key=tip_key, metadata={"source": "tip"},
         )
 
@@ -271,7 +271,7 @@ class Pipeline:
 
         report = generate_fabricated_rumor(self.claude, self.cfg.tone_default)
         self._publish(
-            "insider_report", report, "@LeagueInsider", "🕵️",
+            "insider_report", report, "@DiannaRussinni", "🕵️",
             event_key=slot_key, metadata={"source": "fabricated"},
         )
 

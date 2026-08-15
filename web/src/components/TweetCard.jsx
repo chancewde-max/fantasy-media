@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { supabase } from "../supabaseClient";
 
+// Stable-per-handle fake profile photo (a real-looking but not-a-real-person
+// stock face) so accounts feel like accounts, not initials in a circle.
+function avatarUrl(seed, size) {
+  return `https://i.pravatar.cc/${size}?u=${encodeURIComponent(seed)}`;
+}
+
 function timeAgo(iso) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (s < 60) return "now";
@@ -88,7 +94,7 @@ export default function TweetCard({ post, onChange }) {
   return (
     <article className="tw-card">
       <div className="tw-body-row">
-        <span className="tw-avatar">{name[0]?.toUpperCase() || "F"}</span>
+        <img className="tw-avatar" src={avatarUrl(handle, 80)} alt="" />
         <div className="tw-main">
           <div className="tw-head">
             <span className="tw-display">{name}</span>

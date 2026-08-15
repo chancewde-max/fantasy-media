@@ -86,7 +86,7 @@ def render_post_card(out_dir: str, name: str, headline: str, subtext: str = "") 
     if subtext:
         d.text((80, H - 260), subtext, font=sub_font, fill=FG)
 
-    d.text((80, H - 90), "@LeagueInsider", font=tag_font, fill=MUTED)
+    d.text((80, H - 90), "@DiannaRussinni", font=tag_font, fill=MUTED)
 
     path = os.path.join(out_dir, _safe_name(name) + ".png")
     _save(img, path)
