@@ -32,6 +32,7 @@ class LeagueSnapshot:
     matchups: list[dict[str, Any]]
     standings: list[dict[str, Any]]
     transactions: list[dict[str, Any]]
+    draft_date_ms: int | None = None
 
 
 class ESPNClient:
@@ -73,6 +74,7 @@ class ESPNClient:
             matchups = self._read_matchups(league, week)
             standings = self._read_standings(league)
             transactions = self._read_transactions(league)
+            draft_date_ms = self._read_draft_date(league)
         except (ESPNAuthError, ESPNFetchError):
             raise
         except Exception as exc:  # noqa: BLE001
@@ -83,6 +85,7 @@ class ESPNClient:
             matchups=matchups,
             standings=standings,
             transactions=transactions,
+            draft_date_ms=draft_date_ms,
         )
 
     # --- internal readers, each guarded ---
@@ -138,6 +141,17 @@ class ESPNClient:
                 }
             )
         return out
+
+    def _read_draft_date(self, league: Any) -> int | None:
+        """Scheduled draft date (epoch ms), straight from the raw settings
+        payload — espn-api's parsed Settings object doesn't surface it."""
+        try:
+            data = league.espn_request.get_league()
+            date_ms = data.get("settings", {}).get("draftSettings", {}).get("date")
+            return int(date_ms) if date_ms else None
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Could not read draft date: %s", exc)
+            return None
 
     def _read_transactions(self, league: Any) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []

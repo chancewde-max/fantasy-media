@@ -76,3 +76,17 @@ def test_ranking_movement_new_team():
         [{"rank": 1, "team": "Z", "wins": 1, "losses": 0, "points_for": 100.0}], None
     )
     assert rows[0]["arrow"] == "new"
+
+
+def test_draft_time_event_keyed_by_date():
+    snap = _snap()
+    snap.draft_date_ms = 1735776000000
+    events = detect_events(snap)
+    draft = next(e for e in events if e.kind == "draft_time")
+    assert draft.key == "draft:date:1735776000000"
+    assert draft.data["draft_date_ms"] == 1735776000000
+
+
+def test_draft_time_event_absent_when_unset():
+    events = detect_events(_snap())
+    assert not any(e.kind == "draft_time" for e in events)

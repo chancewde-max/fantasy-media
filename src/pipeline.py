@@ -18,6 +18,7 @@ from .config import Config
 from .delivery import Delivery, DeliveryError
 from .espn_client import ESPNAuthError, ESPNClient, ESPNFetchError
 from .events import build_ranking_movement, detect_events
+from .generators.articles import generate_article
 from .generators.claude_client import ClaudeClient
 from .generators.insider import generate_fabricated_rumor, generate_insider_report
 from .generators.instagram import generate_instagram
@@ -171,6 +172,7 @@ class Pipeline:
             "espn_notification", note, "ESPN", "🚨",
             event_key=f"{event.key}:note", metadata=event.data,
         )
+        self._publish_article(f"{event.title}: {note}", f"{event.key}:article")
 
         if event.kind in {"blowout", "nailbiter", "high", "low", "matchup_final"}:
             tweet = generate_tweet(self.claude, event, cfg.tone_tweets)
@@ -256,6 +258,20 @@ class Pipeline:
 
         self.state.set_meta("insider:last_real_report_at", _utcnow_iso())
         self._publish_reaction_tweets(report, post_id, tip_key)
+        self._publish_article(report, f"{tip_key}:article")
+
+    def _publish_article(self, context: str, key: str) -> None:
+        """A short (headline + one paragraph) companion piece giving color on
+        an ESPN alert or Insider report — not just the one-line blurb."""
+        try:
+            article = generate_article(self.claude, context, self.cfg.tone_default)
+            metadata = {"headline": article["headline"]} if article.get("headline") else {}
+            self._publish(
+                "article", article["body"], "Fantasy Media Desk", "📰",
+                event_key=key, metadata=metadata,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Article generation failed: %s", exc)
 
     def _publish_reaction_tweets(self, report: str, post_id: str, key: str) -> None:
         """Fan reaction tweets to a just-published Insider report. Claude reads
@@ -302,6 +318,7 @@ class Pipeline:
         )
         if post_id is not None:
             self._publish_reaction_tweets(report, post_id, slot_key)
+            self._publish_article(report, f"{slot_key}:article")
 
     def _notify_auth_problem(self, detail: str) -> None:
         msg = (

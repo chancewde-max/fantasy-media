@@ -40,4 +40,9 @@ def _prompt_for(event: Event) -> str:
         return f"Week {d['week']} lowest scorer: {d['team']} with only {d['score']} points."
     if event.kind == "transaction":
         return f"League transaction: {d['summary']}. Write the alert."
+    if event.kind == "draft_time":
+        return (
+            f"The league's draft is scheduled for {d['draft_date_human']}. "
+            "Write the alert announcing the draft date/time."
+        )
     return event.title

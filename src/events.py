@@ -5,6 +5,7 @@ Turns a LeagueSnapshot into a list of Event objects. Each Event has a stable
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -13,7 +14,7 @@ from .espn_client import LeagueSnapshot
 
 @dataclass
 class Event:
-    kind: str            # matchup_final | blowout | nailbiter | high | low | transaction | standings
+    kind: str            # matchup_final | blowout | nailbiter | high | low | transaction | standings | draft_time
     key: str             # stable de-dup key
     title: str           # short human summary
     data: dict[str, Any] = field(default_factory=dict)
@@ -106,6 +107,21 @@ def detect_events(snap: LeagueSnapshot) -> list[Event]:
                 key=f"w{week}:low",
                 title="Lowest scorer",
                 data={"week": week, "team": low[0], "score": low[1]},
+            )
+        )
+
+    # Draft date/time — fires whenever the scheduled value changes (including
+    # the first time it's ever seen), keyed by the value itself so an
+    # unchanged date never re-fires on later polls.
+    if snap.draft_date_ms:
+        when = datetime.fromtimestamp(snap.draft_date_ms / 1000, tz=timezone.utc)
+        human = when.strftime("%A, %B %d at %I:%M %p UTC").replace(" 0", " ")
+        events.append(
+            Event(
+                kind="draft_time",
+                key=f"draft:date:{snap.draft_date_ms}",
+                title=f"Draft scheduled for {human}",
+                data={"draft_date_ms": snap.draft_date_ms, "draft_date_human": human},
             )
         )
 
