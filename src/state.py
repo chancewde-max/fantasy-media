@@ -2,7 +2,8 @@
 
 Stores which events have already fired in SQLite so the same event never
 posts to the group chat twice. This is the difference between a useful tool
-and a spam machine.
+and a spam machine. Also holds small key/value markers (e.g. "when did a
+real Insider tip last get reported") for scheduling decisions.
 """
 from __future__ import annotations
 
@@ -40,6 +41,27 @@ class State:
                     fired_at  TEXT DEFAULT CURRENT_TIMESTAMP
                 )
                 """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS meta (
+                    key   TEXT PRIMARY KEY,
+                    value TEXT
+                )
+                """
+            )
+
+    def get_meta(self, key: str) -> str | None:
+        with self._conn() as conn:
+            row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+            return row[0] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO meta (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
             )
 
     def is_new(self, event_key: str) -> bool:

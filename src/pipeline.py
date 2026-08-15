@@ -12,13 +12,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 
 from .config import Config
 from .delivery import Delivery, DeliveryError
 from .espn_client import ESPNAuthError, ESPNClient, ESPNFetchError
 from .events import build_ranking_movement, detect_events
 from .generators.claude_client import ClaudeClient
-from .generators.insider import cluster_tips, generate_insider_report
+from .generators.insider import generate_fabricated_rumor, generate_insider_report
 from .generators.instagram import generate_instagram
 from .generators.notifications import generate_notification
 from .generators.rankings import generate_rankings
@@ -61,8 +62,8 @@ class Pipeline:
     def run_once(self) -> None:
         """One ESPN poll cycle: detect events -> publish posts (+ fan reactions).
 
-        The Insider tip batch runs on its OWN daily schedule, not here — see
-        run_daily_insider().
+        Insider tip reporting runs on its OWN schedule, not here — see
+        check_pending_tips() and run_scheduled_fabrication().
         """
         try:
             snap = self.espn.fetch_snapshot()
@@ -186,14 +187,13 @@ class Pipeline:
         except (DeliveryError, SupabaseError) as exc:
             log.error("Failed to publish rankings: %s", exc)
 
-    # ----------------------------------------------------------- daily insider
-    def run_daily_insider(self) -> None:
-        """Once-a-day batch: publish only rumors corroborated by 2+ managers.
+    # -------------------------------------------------------------- insider
+    def check_pending_tips(self) -> None:
+        """Report every pending tip as its own Insider drop, right away.
 
-        Clusters pending tips; any cluster of size >= threshold becomes ONE
-        anonymous Insider report, followed by a few fan reaction tweets. Tips in
-        a published cluster are marked published; un-corroborated tips stay
-        pending so they can be matched by a future tip.
+        Called on a short interval (TIP_CHECK_INTERVAL_MINUTES) so a manager's
+        tip shows up in the feed shortly after they submit it — no waiting for
+        a second matching tip.
         """
         if self.supabase is None:
             return
@@ -204,48 +204,36 @@ class Pipeline:
             return
 
         if not tips:
-            log.info("Daily insider: no pending tips.")
             return
 
-        clusters = cluster_tips(
-            self.claude, tips, self.cfg.insider_min_corroboration
-        )
-        log.info(
-            "Daily insider: %d pending tips -> %d corroborated cluster(s).",
-            len(tips), len(clusters),
-        )
-
-        for cluster in clusters:
+        log.info("%d pending tip(s) to report.", len(tips))
+        for tip in tips:
             try:
-                self._publish_insider_cluster(cluster)
+                self._publish_tip_report(tip)
             except SupabaseError as exc:
-                log.error("Failed to publish insider cluster: %s", exc)
+                log.error("Failed to publish tip report: %s", exc)
             except Exception as exc:  # noqa: BLE001
-                log.exception("Unexpected error on insider cluster: %s", exc)
+                log.exception("Unexpected error reporting tip %s: %s", tip.get("id"), exc)
 
-    def _publish_insider_cluster(self, cluster: dict) -> None:
-        summary = cluster.get("summary") or "the latest league buzz"
-        report = generate_insider_report(self.claude, summary, self.cfg.tone_default)
+    def _publish_tip_report(self, tip: dict) -> None:
+        report = generate_insider_report(self.claude, tip["raw_text"], self.cfg.tone_default)
 
-        # De-dup the report itself off the sorted tip ids in the cluster.
-        cluster_key = "insider:" + "+".join(sorted(cluster["tip_ids"]))
+        tip_key = f"insider:tip:{tip['id']}"
         post_id = self._publish(
             "insider_report", report, "@LeagueInsider", "🕵️",
-            event_key=cluster_key,
-            metadata={"source": "corroborated_tips", "corroboration": len(cluster["tip_ids"])},
+            event_key=tip_key, metadata={"source": "tip"},
         )
 
-        # Mark all tips in the cluster as published, linked to the report.
-        for tip_id in cluster["tip_ids"]:
-            try:
-                self.supabase.mark_tip(tip_id, "published", post_id)
-            except SupabaseError as exc:
-                log.warning("Could not mark tip %s published: %s", tip_id, exc)
+        try:
+            self.supabase.mark_tip(tip["id"], "published", post_id)
+        except SupabaseError as exc:
+            log.warning("Could not mark tip %s published: %s", tip["id"], exc)
 
         if post_id is None:
             return  # duplicate report, don't spam reaction tweets again
 
-        # Fan/reporter reaction tweets talking about the report.
+        self.state.set_meta("insider:last_real_report_at", _utcnow_iso())
+
         try:
             tweets = generate_reaction_tweets(
                 self.claude, report, self.cfg.tone_default,
@@ -254,12 +242,38 @@ class Pipeline:
             for i, tw in enumerate(tweets):
                 self._publish(
                     "tweet", tw["text"], tw["handle"], "🐦",
-                    event_key=f"{cluster_key}:reax{i}",
+                    event_key=f"{tip_key}:reax{i}",
                     metadata={"reacting_to": post_id},
                     with_fan_comments=False,
                 )
         except Exception as exc:  # noqa: BLE001
             log.warning("Reaction tweet generation failed: %s", exc)
+
+    def run_scheduled_fabrication(self) -> None:
+        """Scheduled checkpoint (INSIDER_FABRICATE_HOURS, default 7/12/18 UTC):
+        if no real tip has been reported since the previous checkpoint, invent
+        a rumor so the Insider still drops something.
+        """
+        if self.supabase is None:
+            return
+
+        now = datetime.now(timezone.utc)
+        slot_key = f"insider:fab:{now:%Y-%m-%d}:{now:%H}"
+        if not self.state.is_new(slot_key):
+            return
+        self.state.mark_fired(slot_key)
+
+        checkpoint = _previous_checkpoint(self.cfg.insider_fabricate_hours, now)
+        last_real = self.state.get_meta("insider:last_real_report_at")
+        if last_real and datetime.fromisoformat(last_real) >= checkpoint:
+            log.info("A real tip already dropped since %s — skipping fabrication.", checkpoint)
+            return
+
+        report = generate_fabricated_rumor(self.claude, self.cfg.tone_default)
+        self._publish(
+            "insider_report", report, "@LeagueInsider", "🕵️",
+            event_key=slot_key, metadata={"source": "fabricated"},
+        )
 
     def _notify_auth_problem(self, detail: str) -> None:
         msg = (
@@ -285,3 +299,21 @@ def _save_prev_standings(standings) -> None:
     os.makedirs(os.path.dirname(PREV_STANDINGS_FILE), exist_ok=True)
     with open(PREV_STANDINGS_FILE, "w") as fh:
         json.dump(standings, fh)
+
+
+def _utcnow_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _previous_checkpoint(hours: list[int], now: datetime) -> datetime:
+    """The most recent scheduled checkpoint at or before `now` (today or,
+    if none has happened yet today, the last one from yesterday)."""
+    hours = sorted(hours)
+    todays = [
+        h for h in hours
+        if now.replace(hour=h, minute=0, second=0, microsecond=0) <= now
+    ]
+    if todays:
+        return now.replace(hour=todays[-1], minute=0, second=0, microsecond=0)
+    yesterday = now - timedelta(days=1)
+    return yesterday.replace(hour=hours[-1], minute=0, second=0, microsecond=0)

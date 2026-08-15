@@ -36,21 +36,32 @@ def run(cfg: Config) -> None:
         max_instances=1,
         coalesce=True,
     )
-    # The Insider posts once a day, publishing only rumors corroborated 2+ times.
+    # Report each manager tip as its own Insider drop shortly after it's submitted.
     scheduler.add_job(
-        _safe_insider,
+        _safe_tip_check,
+        "interval",
+        minutes=cfg.tip_check_interval_minutes,
+        args=[pipeline],
+        id="tip_check",
+        max_instances=1,
+        coalesce=True,
+    )
+    # If nothing real has come in by these checkpoints, invent a rumor instead.
+    scheduler.add_job(
+        _safe_fabrication,
         "cron",
-        hour=cfg.insider_daily_hour,
+        hour=",".join(str(h) for h in cfg.insider_fabricate_hours),
         minute=0,
         args=[pipeline],
-        id="insider_daily",
+        id="insider_fabrication",
         max_instances=1,
         coalesce=True,
     )
     log.info(
-        "Scheduler started — polling every %d min, Insider daily at %02d:00 UTC. "
-        "Ctrl-C to stop.",
-        cfg.poll_interval_minutes, cfg.insider_daily_hour,
+        "Scheduler started — polling every %d min, checking tips every %d min, "
+        "Insider fabrication checkpoints at %s UTC. Ctrl-C to stop.",
+        cfg.poll_interval_minutes, cfg.tip_check_interval_minutes,
+        ", ".join(f"{h:02d}:00" for h in cfg.insider_fabricate_hours),
     )
     try:
         scheduler.start()
@@ -65,8 +76,15 @@ def _safe_cycle(pipeline: Pipeline) -> None:
         log.exception("Poll cycle raised, continuing: %s", exc)
 
 
-def _safe_insider(pipeline: Pipeline) -> None:
+def _safe_tip_check(pipeline: Pipeline) -> None:
     try:
-        pipeline.run_daily_insider()
+        pipeline.check_pending_tips()
     except Exception as exc:  # noqa: BLE001 - never let the scheduler die
-        log.exception("Daily insider raised, continuing: %s", exc)
+        log.exception("Tip check raised, continuing: %s", exc)
+
+
+def _safe_fabrication(pipeline: Pipeline) -> None:
+    try:
+        pipeline.run_scheduled_fabrication()
+    except Exception as exc:  # noqa: BLE001 - never let the scheduler die
+        log.exception("Insider fabrication raised, continuing: %s", exc)

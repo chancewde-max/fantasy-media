@@ -1,59 +1,42 @@
-"""Tests for tip clustering + reaction cleaning (no network)."""
+"""Tests for insider report generation + reaction cleaning (no network)."""
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.generators.insider import cluster_tips
+from src.generators.insider import generate_fabricated_rumor, generate_insider_report
 from src.generators.reactions import _clean
 
 
 class FakeClaude:
-    """Stub Claude that returns a preset JSON payload (or None)."""
-    def __init__(self, json_payload=None):
-        self._payload = json_payload
+    """Stub Claude that records the prompt and returns a canned reply."""
+    def __init__(self, reply="the report"):
+        self._reply = reply
+        self.last_system = None
+        self.last_prompt = None
 
-    def generate_json(self, system, prompt, tone, max_tokens=600):
-        return self._payload
-
-
-def test_cluster_requires_min_corroboration():
-    tips = [{"id": "1", "raw_text": "team A shopping their RB"}]
-    # Only one tip -> nothing can corroborate.
-    assert cluster_tips(FakeClaude([]), tips, 2) == []
+    def generate(self, system, prompt, tone, max_tokens=300):
+        self.last_system = system
+        self.last_prompt = prompt
+        return self._reply
 
 
-def test_cluster_uses_model_grouping():
-    tips = [
-        {"id": "1", "raw_text": "A is shopping their RB1"},
-        {"id": "2", "raw_text": "heard team A wants to move a running back"},
-        {"id": "3", "raw_text": "B is tanking"},
-    ]
-    payload = [{"tip_ids": ["1", "2"], "summary": "Team A shopping RB1"}]
-    clusters = cluster_tips(FakeClaude(payload), tips, 2)
-    assert len(clusters) == 1
-    assert set(clusters[0]["tip_ids"]) == {"1", "2"}
+def test_insider_report_uses_the_tip_text():
+    claude = FakeClaude()
+    generate_insider_report(claude, "Team A is shopping their RB1", "roast")
+    assert "Team A is shopping their RB1" in claude.last_prompt
 
 
-def test_cluster_drops_undersized_model_groups():
-    tips = [
-        {"id": "1", "raw_text": "x"},
-        {"id": "2", "raw_text": "y"},
-    ]
-    # Model returns a singleton group -> dropped by threshold.
-    payload = [{"tip_ids": ["1"], "summary": "solo"}]
-    assert cluster_tips(FakeClaude(payload), tips, 2) == []
+def test_insider_report_returns_claude_output():
+    claude = FakeClaude(reply="Sources say Team A is moving their RB1 👀")
+    result = generate_insider_report(claude, "Team A is shopping their RB1", "roast")
+    assert result == "Sources say Team A is moving their RB1 👀"
 
 
-def test_cluster_fallback_exact_match_when_model_fails():
-    tips = [
-        {"id": "1", "raw_text": "Team A shopping RB1"},
-        {"id": "2", "raw_text": "team a  shopping rb1"},  # same after normalize
-        {"id": "3", "raw_text": "unrelated"},
-    ]
-    clusters = cluster_tips(FakeClaude(None), tips, 2)  # None -> fallback
-    assert len(clusters) == 1
-    assert set(clusters[0]["tip_ids"]) == {"1", "2"}
+def test_fabricated_rumor_does_not_reference_a_real_tip():
+    claude = FakeClaude()
+    generate_fabricated_rumor(claude, "roast")
+    assert "No tips" in claude.last_prompt
 
 
 def test_clean_reactions_normalizes_handles():

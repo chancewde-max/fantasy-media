@@ -1,12 +1,8 @@
 import { useState } from "react";
 import { supabase } from "../supabaseClient";
 import InstagramCard from "./InstagramCard.jsx";
-
-const STYLES = {
-  espn_notification: { tag: "ESPN", cls: "card-espn", icon: "🚨" },
-  tweet: { tag: "Tweet", cls: "card-tweet", icon: "🐦" },
-  insider_report: { tag: "Insider", cls: "card-insider", icon: "🕵️" },
-};
+import ESPNCard from "./ESPNCard.jsx";
+import TweetCard from "./TweetCard.jsx";
 
 function timeAgo(iso) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -20,25 +16,29 @@ export default function PostCard({ post, onChange }) {
   if (post.type === "instagram") {
     return <InstagramCard post={post} onChange={onChange} />;
   }
+  if (post.type === "espn_notification") {
+    return <ESPNCard post={post} onChange={onChange} />;
+  }
+  if (post.type === "tweet") {
+    return <TweetCard post={post} onChange={onChange} />;
+  }
 
-  const meta = STYLES[post.type] || STYLES.tweet;
+  // insider_report — a plainer card, source stays anonymous by design.
   const [open, setOpen] = useState(false);
   const comments = post.comments || [];
   const reactions = post.reactions || [];
 
   async function react() {
-    // No login, so there's no "my" reaction to toggle off — every tap just
-    // adds one.
     await supabase.from("reactions").insert({ post_id: post.id, emoji: "❤️" });
     onChange();
   }
 
   return (
-    <article className={`card ${meta.cls}`}>
+    <article className="card card-insider">
       <div className="card-head">
-        <span className="avatar">{meta.icon}</span>
-        <span className="author">{post.author_handle || meta.tag}</span>
-        <span className="pill">{meta.tag}</span>
+        <span className="avatar">🕵️</span>
+        <span className="author">{post.author_handle || "Insider"}</span>
+        <span className="pill">Insider</span>
         <span className="time">{timeAgo(post.created_at)}</span>
       </div>
 

@@ -6,8 +6,6 @@
   --muted: #8a94a7;
   --accent: #ff4242;
   --line: #232c40;
-  --espn: #ff4242;
-  --tweet: #1d9bf0;
   --insider: #f5a623;
 }
 
@@ -44,8 +42,6 @@ body {
   background: var(--card); border: 1px solid var(--line);
   border-radius: 16px; overflow: hidden; border-left-width: 4px;
 }
-.card-espn { border-left-color: var(--espn); }
-.card-tweet { border-left-color: var(--tweet); }
 .card-insider { border-left-color: var(--insider); }
 
 .card-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 6px; }
@@ -118,6 +114,76 @@ body {
   padding: 6px 14px 12px; font-size: 10px; letter-spacing: .3px;
   color: #8e8e8e; text-transform: uppercase;
 }
+
+/* espn-style card */
+.espn-card {
+  background: #fff; border-radius: 10px; overflow: hidden;
+  font-family: Helvetica, Arial, sans-serif; color: #1a1a1a;
+}
+.espn-topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-bottom: 3px solid #d00;
+}
+.espn-logo {
+  font-weight: 900; font-style: italic; font-size: 15px; letter-spacing: -.5px;
+  background: #d00; color: #fff; padding: 2px 6px; border-radius: 3px;
+}
+.espn-tag {
+  font-weight: 800; font-size: 11px; letter-spacing: .8px; color: #d00;
+}
+.espn-time { margin-left: auto; color: #767676; font-size: 12px; }
+
+.espn-body {
+  padding: 12px 14px; font-size: 16px; font-weight: 600; line-height: 1.35;
+  color: #14171a;
+}
+
+.espn-foot {
+  display: flex; align-items: center; padding: 8px 14px 12px;
+  border-top: 1px solid #ececec;
+}
+.espn-source { font-size: 12px; color: #767676; font-weight: 700; }
+.espn-actions { margin-left: auto; display: flex; gap: 14px; }
+.espn-act { background: none; border: none; color: #767676; font-size: 13px; padding: 2px; }
+
+.espn-comments {
+  padding: 4px 14px 12px; display: flex; flex-direction: column; gap: 6px;
+  border-top: 1px solid #ececec;
+}
+.espn-comment { font-size: 13px; color: #333; }
+.espn-chandle { color: #767676; font-weight: 700; }
+
+/* tweet-style card */
+.tw-card {
+  background: #000; border: 1px solid #2f3336; border-radius: 12px;
+  padding: 12px 14px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.tw-body-row { display: flex; gap: 10px; }
+.tw-avatar {
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, #1d9bf0, #6228d7);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 16px;
+}
+.tw-main { flex: 1; min-width: 0; }
+.tw-head { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+.tw-display { font-weight: 800; font-size: 14px; color: #e7e9ea; }
+.tw-handle, .tw-dot, .tw-time { color: #71767b; font-size: 14px; }
+.tw-text { color: #e7e9ea; font-size: 14px; line-height: 1.4; margin-top: 2px; }
+
+.tw-actions { display: flex; justify-content: space-between; max-width: 300px; margin-top: 10px; }
+.tw-icon {
+  background: none; border: none; color: #71767b; display: flex; align-items: center;
+  gap: 5px; font-size: 12px; padding: 2px; cursor: pointer;
+}
+.tw-static { cursor: default; }
+
+.tw-comments {
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid #2f3336;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.tw-comment { font-size: 13px; color: #e7e9ea; }
+.tw-chandle { color: #71767b; font-weight: 700; }
 
 /* tab bar */
 .tabbar {

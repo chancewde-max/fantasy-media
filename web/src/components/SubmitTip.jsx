@@ -27,8 +27,8 @@ export default function SubmitTip() {
     <div className="tip-tab">
       <h2>🕵️ Drop a tip to the Insider</h2>
       <p className="muted">
-        Anonymous. The Insider only runs a rumor once <b>2+ managers</b> report
-        the same thing — reports drop once a day. No one sees who tipped.
+        Anonymous. The Insider reports every tip within a few minutes —
+        no one sees who tipped.
       </p>
       <form onSubmit={submit}>
         <textarea
@@ -42,7 +42,7 @@ export default function SubmitTip() {
         </button>
       </form>
       {status === "ok" && (
-        <p className="ok">Tip received 🤫 If it's corroborated, it'll surface.</p>
+        <p className="ok">Tip received 🤫 Watch the feed — it'll surface soon.</p>
       )}
       {status.startsWith("err:") && <p className="err">{status.slice(4)}</p>}
     </div>

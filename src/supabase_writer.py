@@ -50,8 +50,12 @@ class SupabaseWriter:
         image_path: str | None = None,
         event_key: str | None = None,
         metadata: dict | None = None,
+        created_at: str | None = None,
     ) -> str | None:
         """Insert one feed post. Returns the new post id, or None if a duplicate.
+
+        created_at lets callers backdate a post (e.g. historical backfills);
+        omit it to let the database default to now().
 
         Raises SupabaseError on real failures (auth, network, bad request).
         """
@@ -72,6 +76,8 @@ class SupabaseWriter:
             "event_key": event_key,
             "metadata": metadata or {},
         }
+        if created_at:
+            row["created_at"] = created_at
         resp = requests.post(
             f"{self._base}/rest/v1/posts",
             headers={**self._rest_headers, "Prefer": "return=representation"},
@@ -92,17 +98,22 @@ class SupabaseWriter:
             )
         raise SupabaseError(f"Insert failed {resp.status_code}: {resp.text[:200]}")
 
-    def insert_fan_comment(self, post_id: str, handle: str, body: str) -> None:
+    def insert_fan_comment(
+        self, post_id: str, handle: str, body: str, created_at: str | None = None,
+    ) -> None:
         """Insert an AI-generated fan comment on a post (service role)."""
+        payload = {
+            "post_id": post_id,
+            "author_handle": handle,
+            "body": body,
+            "is_ai": True,
+        }
+        if created_at:
+            payload["created_at"] = created_at
         resp = requests.post(
             f"{self._base}/rest/v1/comments",
             headers={**self._rest_headers, "Prefer": "return=minimal"},
-            json={
-                "post_id": post_id,
-                "author_handle": handle,
-                "body": body,
-                "is_ai": True,
-            },
+            json=payload,
             timeout=TIMEOUT,
         )
         if resp.status_code not in (200, 201, 204):
