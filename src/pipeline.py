@@ -81,7 +81,7 @@ class Pipeline:
 
         log.info("Fetched week %s: %d matchups", snap.week, len(snap.matchups))
 
-        events = detect_events(snap)
+        events = detect_events(snap, self.cfg.league_timezone)
         new_events = [e for e in events if self.state.is_new(e.key)]
         log.info("%d events detected, %d new", len(events), len(new_events))
 
@@ -274,12 +274,13 @@ class Pipeline:
 
     def _publish_reaction_tweets(self, report: str, post_id: str, key: str) -> None:
         """Fan reaction tweets to a just-published Insider report. Claude reads
-        how inflammatory the report is and calibrates tone — mild reports get
-        an honor-system defense ('yall reaching'), juicy ones get roasted."""
+        how inflammatory the report is and calibrates both tone (mild reports
+        get an honor-system defense, juicy ones get roasted) AND how many
+        tweets show up — a shrug gets one or two, a scandal gets a pile-on."""
         try:
             tweets = generate_reaction_tweets(
                 self.claude, report, self.cfg.tone_default,
-                n=self.cfg.reaction_tweets_per_report,
+                max_n=self.cfg.reaction_tweets_per_report,
             )
             for i, tw in enumerate(tweets):
                 self._publish(

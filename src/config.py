@@ -109,6 +109,9 @@ class Config:
     vapid_private_key: str
     vapid_subject: str
 
+    # Display
+    league_timezone: str  # IANA tz name, e.g. "America/Chicago" — for date/time text
+
     # Misc
     state_db: str
     log_level: str
@@ -154,9 +157,10 @@ class Config:
             tip_check_interval_minutes=_get_int("TIP_CHECK_INTERVAL_MINUTES", 5),
             insider_fabricate_hours=_get_int_list("INSIDER_FABRICATE_HOURS", [7, 12, 18]),
             fan_comments_per_post=_get_int("FAN_COMMENTS_PER_POST", 2),
-            reaction_tweets_per_report=_get_int("REACTION_TWEETS_PER_REPORT", 3),
+            reaction_tweets_per_report=_get_int("REACTION_TWEETS_PER_REPORT", 6),
             vapid_private_key=_get("VAPID_PRIVATE_KEY", ""),
             vapid_subject=_get("VAPID_SUBJECT", "mailto:admin@example.com"),
+            league_timezone=_get("LEAGUE_TIMEZONE", "America/Chicago"),
             state_db=_get("STATE_DB", "data/state.db"),
             log_level=_get("LOG_LEVEL", "INFO").upper(),
         )

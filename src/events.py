@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .espn_client import LeagueSnapshot
 
@@ -24,7 +25,7 @@ def _final_matchups(snap: LeagueSnapshot) -> list[dict[str, Any]]:
     return [m for m in snap.matchups if m.get("final")]
 
 
-def detect_events(snap: LeagueSnapshot) -> list[Event]:
+def detect_events(snap: LeagueSnapshot, tz_name: str = "UTC") -> list[Event]:
     events: list[Event] = []
     week = snap.week
     finals = _final_matchups(snap)
@@ -114,8 +115,12 @@ def detect_events(snap: LeagueSnapshot) -> list[Event]:
     # the first time it's ever seen), keyed by the value itself so an
     # unchanged date never re-fires on later polls.
     if snap.draft_date_ms:
-        when = datetime.fromtimestamp(snap.draft_date_ms / 1000, tz=timezone.utc)
-        human = when.strftime("%A, %B %d at %I:%M %p UTC").replace(" 0", " ")
+        try:
+            tz = ZoneInfo(tz_name)
+        except Exception:  # noqa: BLE001 - bad tz name, fall back to UTC
+            tz = timezone.utc
+        when = datetime.fromtimestamp(snap.draft_date_ms / 1000, tz=tz)
+        human = when.strftime("%A, %B %d at %I:%M %p %Z").replace(" 0", " ")
         events.append(
             Event(
                 kind="draft_time",

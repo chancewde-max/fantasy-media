@@ -14,12 +14,16 @@ log = logging.getLogger(__name__)
 REACTION_TWEETS_SYSTEM = (
     "You are inventing reactions from fictional fantasy-league 'fans' on a "
     "Twitter-like feed reacting to a just-published insider report. First "
-    "judge how inflammatory the report actually is. If it's mild, vague, or "
-    "barely a scoop, most fans should run an honor-system defense — downplay "
-    "it, have the subject's back, tell people they're reaching ('yall not "
-    "about to make this a thing', 'this is nothing lol'). If it's genuinely "
-    "juicy or damning, fans pile on and roast instead. Match the energy to "
-    "the report — don't roast over nothing, and don't defend the indefensible. "
+    "judge how inflammatory the report actually is — and let that judgment "
+    "decide HOW MANY tweets to write, not just their tone. Mild, vague, "
+    "barely-a-scoop reports should only get a tweet or two, mostly running "
+    "an honor-system defense — downplay it, have the subject's back, tell "
+    "people they're reaching ('yall not about to make this a thing', 'this "
+    "is nothing lol'). Genuinely juicy or damning reports should get a "
+    "bigger pile-on as more of the league jumps in to roast. The length of "
+    "the array you return IS your inflammatory rating — a boring report "
+    "gets a short array, an explosive one gets a long one. Don't roast over "
+    "nothing, and don't defend the indefensible.\n\n"
     'Return a JSON array of objects {"handle": "@fanhandle", "text": "the '
     'tweet"}. Make handles feel like real fan accounts (nicknames, team '
     "stans, degen bettors). Tweets are short (max 200 chars). No real NFL "
@@ -34,13 +38,15 @@ FAN_COMMENTS_SYSTEM = (
 )
 
 
-def generate_reaction_tweets(claude: ClaudeClient, report_body: str, tone: str, n: int = 3):
+def generate_reaction_tweets(claude: ClaudeClient, report_body: str, tone: str, max_n: int = 6):
+    """Fan reaction tweets, count and tone both driven by how inflammatory
+    Claude judges the report to be. max_n is just a hard ceiling."""
     data = claude.generate_json(
         REACTION_TWEETS_SYSTEM,
-        f"The report: \"{report_body}\". Write {n} fan reaction tweets.",
-        tone, max_tokens=500,
+        f'The report: "{report_body}". Write the fan reaction tweets.',
+        tone, max_tokens=700,
     )
-    return _clean(data, n)
+    return _clean(data, max_n)
 
 
 def generate_fan_comments(claude: ClaudeClient, post_body: str, tone: str, n: int = 2):
