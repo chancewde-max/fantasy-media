@@ -168,11 +168,11 @@ class Pipeline:
         cfg = self.cfg
 
         note = generate_notification(self.claude, event, cfg.tone_notifications)
+        metadata = {**event.data, **self._article_metadata(f"{event.title}: {note}")}
         self._publish(
             "espn_notification", note, "ESPN", "🚨",
-            event_key=f"{event.key}:note", metadata=event.data,
+            event_key=f"{event.key}:note", metadata=metadata,
         )
-        self._publish_article(f"{event.title}: {note}", f"{event.key}:article")
 
         if event.kind in {"blowout", "nailbiter", "high", "low", "matchup_final"}:
             tweet = generate_tweet(self.claude, event, cfg.tone_tweets)
@@ -243,9 +243,10 @@ class Pipeline:
         report = generate_insider_report(self.claude, tip["raw_text"], self.cfg.tone_default)
 
         tip_key = f"insider:tip:{tip['id']}"
+        metadata = {"source": "tip", **self._article_metadata(report)}
         post_id = self._publish(
             "insider_report", report, "@DiannaRussinni", "🕵️",
-            event_key=tip_key, metadata={"source": "tip"},
+            event_key=tip_key, metadata=metadata,
         )
 
         try:
@@ -258,20 +259,18 @@ class Pipeline:
 
         self.state.set_meta("insider:last_real_report_at", _utcnow_iso())
         self._publish_reaction_tweets(report, post_id, tip_key)
-        self._publish_article(report, f"{tip_key}:article")
 
-    def _publish_article(self, context: str, key: str) -> None:
+    def _article_metadata(self, context: str) -> dict:
         """A short (headline + one paragraph) companion piece giving color on
-        an ESPN alert or Insider report — not just the one-line blurb."""
+        an ESPN alert or Insider report, tucked into the post's metadata so
+        the card can reveal it as a "read the full story" popup instead of
+        cluttering the feed as its own post."""
         try:
             article = generate_article(self.claude, context, self.cfg.tone_default)
-            metadata = {"headline": article["headline"]} if article.get("headline") else {}
-            self._publish(
-                "article", article["body"], "Fantasy Media Desk", "📰",
-                event_key=key, metadata=metadata,
-            )
+            return {"article": article} if article.get("body") else {}
         except Exception as exc:  # noqa: BLE001
             log.warning("Article generation failed: %s", exc)
+            return {}
 
     def _publish_reaction_tweets(self, report: str, post_id: str, key: str) -> None:
         """Fan reaction tweets to a just-published Insider report. Claude reads
@@ -312,13 +311,13 @@ class Pipeline:
             return
 
         report = generate_fabricated_rumor(self.claude, self.cfg.tone_default)
+        metadata = {"source": "fabricated", **self._article_metadata(report)}
         post_id = self._publish(
             "insider_report", report, "@DiannaRussinni", "🕵️",
-            event_key=slot_key, metadata={"source": "fabricated"},
+            event_key=slot_key, metadata=metadata,
         )
         if post_id is not None:
             self._publish_reaction_tweets(report, post_id, slot_key)
-            self._publish_article(report, f"{slot_key}:article")
 
     def _notify_auth_problem(self, detail: str) -> None:
         msg = (

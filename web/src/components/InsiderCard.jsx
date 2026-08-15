@@ -19,8 +19,10 @@ function timeAgo(iso) {
 
 export default function InsiderCard({ post, onChange }) {
   const [open, setOpen] = useState(false);
+  const [articleOpen, setArticleOpen] = useState(false);
   const comments = post.comments || [];
   const reactions = post.reactions || [];
+  const article = post.metadata?.article;
 
   async function react() {
     await supabase.from("reactions").insert({ post_id: post.id, emoji: "❤️" });
@@ -39,6 +41,20 @@ export default function InsiderCard({ post, onChange }) {
       </div>
 
       <div className="espn-body">{post.body}</div>
+
+      {article?.body && (
+        <button className="espn-readmore" onClick={() => setArticleOpen((o) => !o)}>
+          {articleOpen ? "Hide full story" : "📰 Read the full story"}
+        </button>
+      )}
+      {articleOpen && article?.body && (
+        <div className="espn-article">
+          {article.headline && (
+            <div className="espn-article-headline">{article.headline}</div>
+          )}
+          <div className="espn-article-body">{article.body}</div>
+        </div>
+      )}
 
       <div className="espn-foot">
         <span className="espn-source">Source: anonymous tip</span>

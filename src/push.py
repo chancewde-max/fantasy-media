@@ -63,6 +63,5 @@ def notification_for(post_type: str, author_handle: str, body: str) -> tuple[str
         "espn_notification": "🚨 ESPN alert",
         "tweet": f"🐦 {author_handle or 'New tweet'}",
         "insider_report": "🕵️ Insider report",
-        "article": "📰 New article",
     }
     return titles.get(post_type, "Fantasy Media"), snippet
