@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { supabase } from "../supabaseClient";
+import InstagramCard from "./InstagramCard.jsx";
 
 const STYLES = {
   espn_notification: { tag: "ESPN", cls: "card-espn", icon: "🚨" },
   tweet: { tag: "Tweet", cls: "card-tweet", icon: "🐦" },
-  instagram: { tag: "Insta", cls: "card-insta", icon: "📸" },
   insider_report: { tag: "Insider", cls: "card-insider", icon: "🕵️" },
 };
 
@@ -17,6 +17,10 @@ function timeAgo(iso) {
 }
 
 export default function PostCard({ post, onChange }) {
+  if (post.type === "instagram") {
+    return <InstagramCard post={post} onChange={onChange} />;
+  }
+
   const meta = STYLES[post.type] || STYLES.tweet;
   const [open, setOpen] = useState(false);
   const comments = post.comments || [];
