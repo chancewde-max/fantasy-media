@@ -248,9 +248,11 @@ class Pipeline:
         report = generate_insider_report(self.claude, tip["raw_text"], self.cfg.tone_default)
 
         tip_key = f"insider:tip:{tip['id']}"
-        metadata = {"source": "tip", **self._article_metadata(report)}
+        # headline is the notification + card's bold line; body is the fuller
+        # story revealed behind "Read the full story".
+        metadata = {"source": "tip", "article": {"headline": "", "body": report["body"]}}
         post_id = self._publish(
-            "insider_report", report, "@DiannaRussinni", "🕵️",
+            "insider_report", report["headline"], "@DiannaRussinni", "🕵️",
             event_key=tip_key, metadata=metadata,
         )
 
@@ -263,7 +265,7 @@ class Pipeline:
             return  # duplicate report, don't spam reaction tweets again
 
         self.state.set_meta("insider:last_real_report_at", _utcnow_iso())
-        self._publish_reaction_tweets(report, post_id, tip_key)
+        self._publish_reaction_tweets(report["body"], post_id, tip_key)
 
     def _article_metadata(self, context: str) -> dict:
         """A short (headline + one paragraph) companion piece giving color on
@@ -317,13 +319,13 @@ class Pipeline:
             return
 
         report = generate_fabricated_rumor(self.claude, self.cfg.tone_default)
-        metadata = {"source": "fabricated", **self._article_metadata(report)}
+        metadata = {"source": "fabricated", "article": {"headline": "", "body": report["body"]}}
         post_id = self._publish(
-            "insider_report", report, "@DiannaRussinni", "🕵️",
+            "insider_report", report["headline"], "@DiannaRussinni", "🕵️",
             event_key=slot_key, metadata=metadata,
         )
         if post_id is not None:
-            self._publish_reaction_tweets(report, post_id, slot_key)
+            self._publish_reaction_tweets(report["body"], post_id, slot_key)
 
     def _notify_auth_problem(self, detail: str) -> None:
         msg = (

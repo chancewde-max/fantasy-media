@@ -36,32 +36,53 @@ class FakeClaude:
 
 
 def test_insider_report_uses_the_tip_text():
-    claude = FakeClaude(json_reply={"report": "the report"})
+    claude = FakeClaude(json_reply={"headline": "Big moves 👀", "body": "the report"})
     generate_insider_report(claude, "Team A is shopping their RB1", "roast")
     assert "Team A is shopping their RB1" in claude.last_prompt
 
 
-def test_insider_report_returns_claude_output():
-    claude = FakeClaude(json_reply={"report": "Sources say Team A is moving their RB1 👀"})
+def test_insider_report_returns_headline_and_body():
+    claude = FakeClaude(json_reply={
+        "headline": "Team A shopping RB1 👀",
+        "body": "Sources say Team A is quietly moving their RB1. The league is buzzing.",
+    })
     result = generate_insider_report(claude, "Team A is shopping their RB1", "roast")
-    assert result == "Sources say Team A is moving their RB1 👀"
+    assert result["headline"] == "Team A shopping RB1 👀"
+    assert result["body"].startswith("Sources say Team A")
+
+
+def test_insider_report_synthesizes_headline_when_missing():
+    claude = FakeClaude(json_reply={
+        "body": "Word around the league is that a blockbuster trade is brewing behind closed doors.",
+    })
+    result = generate_insider_report(claude, "a tip", "roast")
+    # headline is derived from the body's opening, not left blank
+    assert result["headline"]
+    assert len(result["headline"].split()) <= 11  # max_words (10) + trailing ellipsis token
 
 
 def test_insider_report_falls_back_when_first_attempt_refuses():
     claude = FakeClaude(json_reply=[
-        {"report": "I can't help with this request."},
-        {"report": "Word around the league: a shady trade is brewing. 👀"},
+        {"headline": "No comment", "body": "I can't help with this request."},
+        {"headline": "Shady trade brewing 👀", "body": "Word around the league: a shady trade is brewing."},
     ])
     result = generate_insider_report(claude, "a real-person claim", "roast")
-    assert result == "Word around the league: a shady trade is brewing. 👀"
+    assert result["headline"] == "Shady trade brewing 👀"
     assert claude.json_calls == 2
 
 
 def test_insider_report_final_fallback_never_leaks_a_refusal():
     claude = FakeClaude(json_reply=[None, None])
     result = generate_insider_report(claude, "a real-person claim", "roast")
-    assert result
-    assert "can't" not in result.lower()
+    assert result["headline"] and result["body"]
+    assert "can't" not in f"{result['headline']} {result['body']}".lower()
+
+
+def test_fabricated_rumor_returns_headline_and_body():
+    claude = FakeClaude(json_reply={"headline": "Waiver heist 👀", "body": "Sources say a waiver war is coming."})
+    result = generate_fabricated_rumor(claude, "roast")
+    assert result["headline"] == "Waiver heist 👀"
+    assert result["body"]
 
 
 def test_fabricated_rumor_does_not_reference_a_real_tip():
