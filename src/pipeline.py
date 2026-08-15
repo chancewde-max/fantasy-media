@@ -26,6 +26,7 @@ from .generators.notifications import generate_notification
 from .generators.rankings import generate_rankings
 from .generators.reactions import generate_fan_comments, generate_reaction_tweets
 from .generators.tweets import generate_tweet
+from .lore import memory_snippet
 from .push import notification_for, send_to_subscriptions
 from .state import State
 from .supabase_writer import SupabaseError, SupabaseWriter
@@ -166,6 +167,10 @@ class Pipeline:
 
     def _handle_event(self, event) -> None:
         cfg = self.cfg
+
+        lore = memory_snippet(_team_names_for_event(event))
+        if lore:
+            event.data["lore"] = lore
 
         note = generate_notification(self.claude, event, cfg.tone_notifications)
         metadata = {**event.data, **self._article_metadata(f"{event.title}: {note}")}
@@ -330,6 +335,18 @@ class Pipeline:
                           event_key=None, metadata={"kind": "auth_error"})
         except (DeliveryError, SupabaseError) as exc:
             log.error("Could not send auth-problem heads-up: %s", exc)
+
+
+def _team_names_for_event(event) -> list[str]:
+    """Which team name(s) this event is about, for a league-lore lookup."""
+    d = event.data
+    if event.kind in {"matchup_final", "blowout"}:
+        return [t for t in (d.get("winner"), d.get("loser")) if t]
+    if event.kind == "nailbiter":
+        return list(d.get("teams") or [])
+    if event.kind in {"high", "low"}:
+        return [t for t in (d.get("team"),) if t]
+    return []
 
 
 def _load_prev_standings():

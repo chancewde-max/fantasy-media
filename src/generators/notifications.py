@@ -7,12 +7,19 @@ from .claude_client import ClaudeClient
 SYSTEM = (
     "You write short ESPN-style breaking-news fantasy football alerts. "
     "One or two sentences. Lead with a siren emoji. No hashtags. "
-    "Keep it under 240 characters."
+    "Keep it under 240 characters. You may be given 'League memory' — real "
+    "history about these teams (head-to-head record, late-season patterns). "
+    "If given, only work it in when it actually fits naturally, the way a "
+    "fan who's followed this league for years would bring it up in passing "
+    "— don't force it, don't state it like a stat readout."
 )
 
 
 def generate_notification(claude: ClaudeClient, event: Event, tone: str) -> str:
     prompt = _prompt_for(event)
+    lore = event.data.get("lore")
+    if lore:
+        prompt += f" League memory: {lore}"
     return claude.generate(SYSTEM, prompt, tone, max_tokens=160)
 
 

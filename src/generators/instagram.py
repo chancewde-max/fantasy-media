@@ -8,7 +8,11 @@ from .claude_client import ClaudeClient
 SYSTEM = (
     "You write Instagram captions for a fantasy football league's parody "
     "media account. 1-3 short lines, punchy, 3-5 hashtags at the end, "
-    "a couple of emojis. Keep it under 300 characters."
+    "a couple of emojis. Keep it under 300 characters. The event details "
+    "may include a 'lore' field — real league history (head-to-head "
+    "record, late-season patterns). If present, only work it in when it "
+    "actually fits, like a fan who's followed this league for years — "
+    "don't force it."
 )
 
 
