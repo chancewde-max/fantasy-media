@@ -82,22 +82,22 @@ export async function enablePush() {
 
   try {
     const json = sub.toJSON();
-    // ignoreDuplicates (ON CONFLICT DO NOTHING), not merge-duplicates (DO
-    // UPDATE) — an upsert's "or update" half needs SELECT rights in
-    // Postgres to check the existing row, and this table deliberately has
-    // no SELECT policy (so the anon key can register a device but never
-    // read back the full subscriber list). DO NOTHING sidesteps that
-    // entirely, and is all we need anyway: the same endpoint always
-    // carries the same keys, so there's nothing to actually update.
-    const { error } = await supabase.from("push_subscriptions").upsert(
-      {
-        league_id: LEAGUE_ID,
-        endpoint: json.endpoint,
-        p256dh: json.keys.p256dh,
-        auth: json.keys.auth,
-      },
-      { onConflict: "endpoint", ignoreDuplicates: true }
-    );
+    // Save through a SECURITY DEFINER RPC, not a direct insert/upsert.
+    // push_subscriptions deliberately has no SELECT policy (the anon key can
+    // register a device but must never read back the subscriber list) — and
+    // any direct write that returns the row (PostgREST's return=representation,
+    // which a plain upsert triggers) runs a SELECT-check against RLS, finds no
+    // policy to satisfy, and the whole statement is rejected with "new row
+    // violates row-level security policy". The RPC does the upsert server-side
+    // and returns void, so nothing is ever selected back and no SELECT policy
+    // is needed. It's idempotent: the same endpoint re-registering just
+    // refreshes its keys.
+    const { error } = await supabase.rpc("register_push_subscription", {
+      p_league_id: LEAGUE_ID,
+      p_endpoint: json.endpoint,
+      p_p256dh: json.keys.p256dh,
+      p_auth: json.keys.auth,
+    });
     if (error) throw error;
   } catch (e) {
     throw new Error(`[save] ${e.message || e}`);
