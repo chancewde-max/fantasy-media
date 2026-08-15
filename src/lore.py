@@ -9,15 +9,10 @@ context an actual longtime fan would drop in passing — or an empty string if
 there's nothing notable, so it never gets forced into every post.
 
 Data entered from league history screenshots (2024, 2025 seasons) + the
-existing historical-backfill playoff record. Team-name continuity across
-2025->2026 was used to resolve owners for 9 of this season's 10 teams; one
-2026 team ("The Island Boys") was inferred from the single unmatched 2025
-name ("The Flee The Scenes") by elimination, later confirmed directly (it's
-Chance, who also ran "The Juice is Loose in Hell" in 2024). Four remaining
-2024-only team names (the league had 11 teams in 2024, 10 from 2025 on)
-aren't confidently tied to a specific owner and are left out of the
-owner-keyed lore — they still appear in SEASON_RESULTS for reference, just
-not in pattern lookups.
+existing historical-backfill playoff record, confirmed directly by the
+league's owners. The league had 11 teams in 2024 and has run with 10 since;
+Garren ("Garren's Great Team") left after 2024, so he's the one team with
+no current-season lore lookup — kept as a fact, not an owner key.
 """
 from __future__ import annotations
 
@@ -28,8 +23,8 @@ CURRENT_YEAR = 2026
 # league's own commissioner-note voice, e.g. "Juan's squad").
 # ---------------------------------------------------------------------------
 OWNER_TEAMS: dict[str, dict[int, str]] = {
-    "ethan": {2025: "So Good That It Hurts", 2026: "So good that it Hurts"},
-    "cameron": {2025: "Flaccid Winners", 2026: "FLACCID WINNERS"},
+    "ethan": {2024: "Njigbas in Paris", 2025: "So Good That It Hurts", 2026: "So good that it Hurts"},
+    "cameron": {2024: "MEAT ON MEAT", 2025: "Flaccid Winners", 2026: "FLACCID WINNERS"},
     "josh": {2024: "Need More Beers", 2025: "Need More Beers", 2026: "Need More Beers"},
     "chance": {2024: "The Juice is Loose in Hell", 2025: "The Flee The Scenes", 2026: "The Island Boys"},
     "juan": {2024: "Tha Hoodie Gang", 2025: "Tha Hoodie Gang", 2026: "Tha Hoodie Gang"},
@@ -37,14 +32,13 @@ OWNER_TEAMS: dict[str, dict[int, str]] = {
     "jake": {2024: "Jabawockeez", 2025: "Jabawockeez", 2026: "JABAWOCKEEZ"},
     "patrick": {2024: "Patrick's Team", 2025: "Patrick's Team", 2026: "Patrick's Team"},
     "bode": {2024: "Team of Collusion", 2025: "Team of Collusion", 2026: "Team of Collusion"},
-    "miles": {2025: "I Chase White Kids", 2026: "I Chase White Kids"},
+    "miles": {2024: "White Diggs", 2025: "I Chase White Kids", 2026: "I Chase White Kids"},
 }
 
-# 2024-only teams with no confirmed owner link — kept for historical facts,
-# excluded from head-to-head/pattern lookups.
-UNLINKED_2024_TEAMS = {
-    "MEAT ON MEAT", "White Diggs", "Njigbas in Paris", "Garren's Great Team",
-}
+# Garren's Great Team (2024) — Garren left the league after 2024, so there's
+# no current-season team to attach his history to. Kept as a fact, not a
+# lookup key.
+UNLINKED_2024_TEAMS = {"Garren's Great Team"}
 
 # ---------------------------------------------------------------------------
 # Regular-season weekly results, team names as they appeared THAT season.

@@ -20,10 +20,7 @@ def test_owner_resolves_from_current_season_team_name():
     assert _owner_for("So good that it Hurts", 2026) == "ethan"
 
 
-def test_owner_resolves_inferred_2026_rename():
-    # "The Island Boys" is the one 2026 name with no 2025 match, and "The
-    # Flee The Scenes" (chance's 2025 team) is the one unmatched 2025 name —
-    # resolved by elimination.
+def test_owner_resolves_2026_rename():
     assert _owner_for("The Island Boys", 2026) == "chance"
 
 
@@ -46,8 +43,8 @@ def test_rivalry_note_names_the_leader():
 
 
 def test_rivalry_note_none_below_min_games():
-    # ethan and miles have never played each other in the recorded data.
-    assert rivalry_note("ethan", "miles") is None
+    # ethan and josh have only met twice in the recorded data.
+    assert rivalry_note("ethan", "josh") is None
 
 
 def test_late_collapse_note_flags_a_real_pattern():
