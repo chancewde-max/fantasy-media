@@ -29,9 +29,9 @@ SEASONS = [
     {
         "year": 2024,
         "standings": [
-            {"rank": 1, "team": "Njiqbas in Paris", "wins": 8, "losses": 5},
+            {"rank": 1, "team": "Njigbas in Paris", "wins": 8, "losses": 5},
             {"rank": 2, "team": "Need More Beers", "wins": 7, "losses": 5},
-            {"rank": 3, "team": "Meat on Meat", "wins": 5, "losses": 7},
+            {"rank": 3, "team": "MEAT ON MEAT", "wins": 5, "losses": 7},
             {"rank": 4, "team": "The Juice is Loose in Hell", "wins": 6, "losses": 7},
             {"rank": 5, "team": "Team of Collusion", "wins": 9, "losses": 4},
             {"rank": 6, "team": "Jabawockeez", "wins": 5, "losses": 7},
@@ -42,7 +42,7 @@ SEASONS = [
             {"rank": 11, "team": "Patrick's Team", "wins": 5, "losses": 8},
         ],
         "standings_when": "2025-01-06T12:00:00+00:00",
-        "champion": "Njiqbas in Paris",
+        "champion": "Njigbas in Paris",
         "runner_up": "Need More Beers",
         "champ_score": "249.28 - 232.56",
         "champ_when": "2025-01-05T21:00:00+00:00",
@@ -67,7 +67,7 @@ SEASONS = [
             },
             {
                 "key": "r2_njiqbas", "when": "2024-12-29T20:30:00+00:00",
-                "facts": "Round 2 of the 2024 playoffs: Njiqbas in Paris "
+                "facts": "Round 2 of the 2024 playoffs: Njigbas in Paris "
                          "eliminated The Juice Is Loose In Hell 132.74 to 110.16 "
                          "to reach the championship.",
                 "notable": None,
@@ -86,7 +86,7 @@ SEASONS = [
             {"rank": 7, "team": "Jabawockeez", "wins": 8, "losses": 6},
             {"rank": 8, "team": "Patrick's Team", "wins": 5, "losses": 9},
             {"rank": 9, "team": "Team of Collusion", "wins": 2, "losses": 12},
-            {"rank": 10, "team": "I Chase White Women", "wins": 5, "losses": 9},
+            {"rank": 10, "team": "I Chase White Kids", "wins": 5, "losses": 9},
         ],
         "standings_when": "2026-01-05T12:00:00+00:00",
         "champion": "So Good That It Hurts",

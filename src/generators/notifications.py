@@ -52,4 +52,9 @@ def _prompt_for(event: Event) -> str:
             f"The league's draft is scheduled for {d['draft_date_human']}. "
             "Write the alert announcing the draft date/time."
         )
+    if event.kind == "game_of_the_week":
+        return (
+            f"Week {d['week']} Game of the Week: {d['team_a']} vs {d['team_b']}. "
+            "Write the alert hyping this matchup as the one to watch."
+        )
     return event.title

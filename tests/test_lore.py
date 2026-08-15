@@ -12,6 +12,7 @@ from src.lore import (
     late_collapse_note,
     memory_snippet,
     rivalry_note,
+    select_game_of_the_week,
 )
 
 
@@ -62,3 +63,23 @@ def test_memory_snippet_empty_when_nothing_notable():
 def test_memory_snippet_combines_rivalry_and_pattern():
     snippet = memory_snippet(["So good that it Hurts", "FLACCID WINNERS"])
     assert snippet  # non-empty: cameron has a flagged late-season pattern
+
+
+def test_gotw_picks_the_rivalry_matchup_over_a_random_one():
+    matchups = [
+        {"home": "JABAWOCKEEZ", "away": "Need More Beers", "final": False},
+        {"home": "Patrick's Team", "away": "Team of Collusion", "final": False},
+    ]
+    standings = [
+        {"team": "JABAWOCKEEZ", "rank": 3},
+        {"team": "Need More Beers", "rank": 4},
+        {"team": "Patrick's Team", "rank": 9},
+        {"team": "Team of Collusion", "rank": 10},
+    ]
+    pick = select_game_of_the_week(matchups, standings)
+    assert {pick["team_a"], pick["team_b"]} == {"JABAWOCKEEZ", "Need More Beers"}
+    assert pick["lore"]
+
+
+def test_gotw_none_with_no_matchups():
+    assert select_game_of_the_week([], []) is None

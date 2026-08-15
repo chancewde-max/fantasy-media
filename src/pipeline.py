@@ -179,7 +179,7 @@ class Pipeline:
             event_key=f"{event.key}:note", metadata=metadata,
         )
 
-        if event.kind in {"blowout", "nailbiter", "high", "low", "matchup_final"}:
+        if event.kind in {"blowout", "nailbiter", "high", "low", "matchup_final", "game_of_the_week"}:
             tweet = generate_tweet(self.claude, event, cfg.tone_tweets)
             self._publish(
                 "tweet", tweet, "@DiannaRussinni", "🐦",

@@ -318,3 +318,55 @@ def memory_snippet(team_names: list[str], year: int = CURRENT_YEAR) -> str:
             notes.append(note)
 
     return " ".join(notes)
+
+
+def select_game_of_the_week(
+    matchups: list[dict], standings: list[dict], year: int = CURRENT_YEAR,
+) -> dict | None:
+    """Pick the week's marquee matchup — a real rivalry first, then a team on
+    a known pattern, then falling back to whichever pairing is closest in
+    the current standings. Works on matchups before they're final, so this
+    is a preview pick, not a recap of who already won.
+
+    Returns {"team_a", "team_b", "lore"} (lore may be "") or None if there
+    are no matchups this week.
+    """
+    if not matchups:
+        return None
+
+    rank_by_team = {s["team"]: s["rank"] for s in standings}
+    best: dict | None = None
+    best_score = -1.0
+
+    for m in matchups:
+        a, b = m.get("home"), m.get("away")
+        if not a or not b:
+            continue
+        owner_a, owner_b = _owner_for(a, year), _owner_for(b, year)
+        lore = ""
+        score = 0.0
+
+        if owner_a and owner_b:
+            note = rivalry_note(owner_a, owner_b)
+            if note:
+                h2h = head_to_head(owner_a, owner_b)
+                lore = note
+                score = 100 - abs(h2h["wins"] - h2h["losses"])
+            else:
+                pattern_notes = [
+                    n for n in (late_collapse_note(owner_a), late_collapse_note(owner_b)) if n
+                ]
+                if pattern_notes:
+                    lore = " ".join(pattern_notes)
+                    score = 50
+
+        if not lore:
+            ra, rb = rank_by_team.get(a), rank_by_team.get(b)
+            if ra and rb:
+                score = max(0, 30 - abs(ra - rb) * 3)
+
+        if score > best_score:
+            best_score = score
+            best = {"team_a": a, "team_b": b, "lore": lore}
+
+    return best

@@ -11,11 +11,12 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from .espn_client import LeagueSnapshot
+from .lore import select_game_of_the_week
 
 
 @dataclass
 class Event:
-    kind: str            # matchup_final | blowout | nailbiter | high | low | transaction | standings | draft_time
+    kind: str            # matchup_final | blowout | nailbiter | high | low | transaction | standings | draft_time | game_of_the_week
     key: str             # stable de-dup key
     title: str           # short human summary
     data: dict[str, Any] = field(default_factory=dict)
@@ -29,6 +30,22 @@ def detect_events(snap: LeagueSnapshot, tz_name: str = "UTC") -> list[Event]:
     events: list[Event] = []
     week = snap.week
     finals = _final_matchups(snap)
+
+    # Game of the Week — picked from ALL of this week's matchups (final or
+    # not), so this fires as a preview the moment a new week's schedule
+    # appears, not a recap after the fact. Keyed per-week so it locks in
+    # once and doesn't get re-picked as scores start coming in.
+    if snap.matchups:
+        gotw = select_game_of_the_week(snap.matchups, snap.standings)
+        if gotw:
+            events.append(
+                Event(
+                    kind="game_of_the_week",
+                    key=f"w{week}:gotw",
+                    title=f"Week {week} Game of the Week: {gotw['team_a']} vs {gotw['team_b']}",
+                    data={"week": week, **gotw},
+                )
+            )
 
     # Per-matchup results
     for m in finals:
