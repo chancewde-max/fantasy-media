@@ -36,8 +36,6 @@ body {
   backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
 }
 .logo { font-weight: 800; letter-spacing: .3px; }
-.logo.big { font-size: 26px; margin-bottom: 8px; }
-.link { background: none; border: none; color: var(--muted); font-size: 14px; }
 
 .content { flex: 1; padding: 12px 12px 90px; }
 
@@ -90,7 +88,6 @@ body {
 .tabicon { font-size: 20px; }
 
 /* forms */
-.login-card { width: 100%; max-width: 360px; }
 input, textarea {
   width: 100%; margin: 8px 0; padding: 13px 14px; border-radius: 12px;
   border: 1px solid var(--line); background: var(--card); color: var(--fg);

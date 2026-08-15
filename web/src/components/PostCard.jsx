@@ -23,17 +23,9 @@ export default function PostCard({ post, onChange }) {
   const reactions = post.reactions || [];
 
   async function react() {
-    const { data: u } = await supabase.auth.getUser();
-    const uid = u?.user?.id;
-    if (!uid) return;
-    const mine = reactions.find((r) => r.user_id === uid && r.emoji === "❤️");
-    if (mine) {
-      await supabase.from("reactions").delete().eq("id", mine.id);
-    } else {
-      await supabase
-        .from("reactions")
-        .insert({ post_id: post.id, emoji: "❤️", user_id: uid });
-    }
+    // No login, so there's no "my" reaction to toggle off — every tap just
+    // adds one.
+    await supabase.from("reactions").insert({ post_id: post.id, emoji: "❤️" });
     onChange();
   }
 

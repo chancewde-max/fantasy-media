@@ -27,11 +27,13 @@ npm run dev                     # http://localhost:5173
 6. Deploy → open the URL on your phone → **Add to Home Screen** for an app feel.
 
 ## Auth
-Sign-in is a Supabase **magic link** (passwordless). On first sign-in the app
-adds you to the league so row-level security lets you read the feed. Invite
-league-mates by having them sign in with their email.
+There isn't any. The feed, reactions, and tip form are open to anyone with
+the link — no sign-in screen, no email. Row-level security still protects
+writes to tables the app doesn't touch (e.g. `memberships`), but reads and
+the writes the app makes (tips, reactions) are public. Reactions aren't
+deduped per-person since there's no login to key them on — every tap adds one.
 
 ## Before it looks alive
 Run these once in the Supabase SQL Editor (in order):
-`supabase/schema.sql` → `schema_v2.sql` → `schema_v3.sql` → `seed_demo.sql`
-(the last one drops in sample posts so the feed isn't empty).
+`supabase/schema.sql` → `schema_v2.sql` → `schema_v3.sql` → `schema_v4.sql` →
+`seed_demo.sql` (the last one drops in sample posts so the feed isn't empty).
