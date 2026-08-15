@@ -34,17 +34,27 @@ body {
 }
 .logo { font-weight: 800; letter-spacing: .3px; }
 
+.notify-wrap { position: relative; }
 .notify-btn {
   display: flex; align-items: center; gap: 6px;
   background: var(--card2); border: 1px solid var(--line); border-radius: 999px;
   color: var(--muted); font-size: 12px; padding: 6px 12px; cursor: pointer;
 }
 .notify-btn:disabled { cursor: default; }
-.notify-hint { cursor: help; }
+.notify-hint { cursor: pointer; }
 .notify-label { display: none; }
 @media (min-width: 420px) {
   .notify-label { display: inline; }
 }
+
+.notify-banner {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 20;
+  width: 250px; max-width: 75vw;
+  background: var(--card2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; font-size: 12px; line-height: 1.6; color: var(--fg);
+  box-shadow: 0 10px 30px rgba(0,0,0,.5);
+}
+.notify-banner-err { border-color: var(--accent); color: #ffb4b4; }
 
 .content { flex: 1; padding: 12px 12px 90px; }
 

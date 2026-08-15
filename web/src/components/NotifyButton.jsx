@@ -23,6 +23,7 @@ export default function NotifyButton() {
   // checking | ios-needs-install | unsupported | denied | unsubscribed | subscribed | working
   const [state, setState] = useState("checking");
   const [err, setErr] = useState("");
+  const [hint, setHint] = useState("");
 
   useEffect(() => {
     if (isIOS() && !isStandalone()) {
@@ -44,11 +45,11 @@ export default function NotifyButton() {
       await enablePush();
       setState("subscribed");
     } catch (e) {
-      const message = e.message || "Couldn't enable notifications.";
-      setErr(message);
-      // title/tooltip never shows on mobile taps — alert is blunt but the
-      // only thing guaranteed visible on every phone.
-      alert(message);
+      // Note: NOT alert() — iOS Safari silently swallows alert()/confirm()
+      // when the app is running installed (standalone) from the Home
+      // Screen, which is exactly the case this button most needs to work
+      // in. Inline text is the only thing guaranteed visible everywhere.
+      setErr(e.message || "Couldn't enable notifications.");
       setState(Notification.permission === "denied" ? "denied" : "unsubscribed");
     }
   }
@@ -57,20 +58,22 @@ export default function NotifyButton() {
 
   if (state === "ios-needs-install") {
     return (
-      <button
-        className="notify-btn notify-hint"
-        onClick={() =>
-          alert(
-            "iPhone notifications need the app installed first:\n\n" +
-              "1. Tap the Share button in Safari\n" +
-              "2. Tap \"Add to Home Screen\"\n" +
-              "3. Open Fantasy Media from that new home screen icon\n" +
-              "4. Tap \"Enable notifications\" again from there"
-          )
-        }
-      >
-        🔕 <span className="notify-label">Add to Home Screen to enable</span>
-      </button>
+      <div className="notify-wrap">
+        <button className="notify-btn notify-hint" onClick={() => setHint((h) => !h)}>
+          🔕 <span className="notify-label">Add to Home Screen to enable</span>
+        </button>
+        {hint && (
+          <div className="notify-banner">
+            1. Tap the Share button in Safari
+            <br />
+            2. Tap "Add to Home Screen"
+            <br />
+            3. Open Fantasy Media from that new home screen icon
+            <br />
+            4. Tap "Enable notifications" again from there
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -81,13 +84,15 @@ export default function NotifyButton() {
     "Enable notifications";
 
   return (
-    <button
-      className="notify-btn"
-      onClick={onClick}
-      disabled={state !== "unsubscribed"}
-      title={err || label}
-    >
-      {state === "subscribed" ? "🔔" : "🔕"} <span className="notify-label">{label}</span>
-    </button>
+    <div className="notify-wrap">
+      <button
+        className="notify-btn"
+        onClick={onClick}
+        disabled={state !== "unsubscribed"}
+      >
+        {state === "subscribed" ? "🔔" : "🔕"} <span className="notify-label">{label}</span>
+      </button>
+      {err && <div className="notify-banner notify-banner-err">{err}</div>}
+    </div>
   );
 }
