@@ -113,48 +113,119 @@ def render_champion_card(
 ) -> str:
     """Championship announcement card — same navy-board family as the rankings."""
     _ensure_dir(out_dir)
-    W, H = 1080, 760
+    W, H = 1080, 800
     img = _vgradient(W, H, BOARD_TOP, BOARD_BOTTOM)
+    _radial_glow(img, W / 2, 210, 260, (255, 210, 90))
     d = ImageDraw.Draw(img)
+    _confetti(d, W, H)
     d.rounded_rectangle([6, 6, W - 6, H - 6], radius=28, outline=BOARD_BORDER, width=4)
 
     tag_font = _load_font(30)
     label_font = _load_font(38)
-    team_font = _load_font(60)
-    score_font = _load_font(32)
+    team_font = _load_font(58)
+    score_font = _load_font(34)
 
     d.text((W / 2, 70), "FANTASY MEDIA RESEARCH", font=tag_font, fill=(160, 190, 240), anchor="ma")
-    _trophy(d, W / 2, 195, 65)
-    d.text((W / 2, 310), f"{season_label} CHAMPION", font=label_font, fill=(190, 210, 245), anchor="ma")
+    _trophy(d, W / 2, 210, 92)
+    d.text((W / 2, 340), f"{season_label} CHAMPION", font=label_font, fill=(190, 210, 245), anchor="ma")
 
-    d.rounded_rectangle([90, 385, W - 90, 385 + 210], radius=20, fill=ROW_PALETTE[0])
-    _wrapped_text_centered(d, W / 2, 385 + 105, champion.upper(), team_font, (255, 255, 255), max_width=W - 180)
+    _ribbon(d, W / 2, 415 + 105, W - 180, 210, ROW_PALETTE[0])
+    _wrapped_text_centered(d, W / 2, 415 + 105, champion.upper(), team_font, (255, 255, 255), max_width=W - 240)
 
     if score_line:
-        d.text((W / 2, 650), score_line, font=score_font, fill=(220, 230, 250), anchor="ma")
+        d.line([(W / 2 - 60, 690), (W / 2 + 60, 690)], fill=(120, 150, 210), width=2)
+        d.text((W / 2, 710), score_line, font=score_font, fill=(220, 230, 250), anchor="ma")
 
     path = os.path.join(out_dir, _safe_name(name) + ".png")
     _save(img, path)
     return path
 
 
+def _radial_glow(img: Image.Image, cx: float, cy: float, radius: float, color: tuple) -> None:
+    """Soft radial highlight behind the trophy — cheap glow via banded circles."""
+    d = ImageDraw.Draw(img, "RGBA")
+    steps = 24
+    for i in range(steps, 0, -1):
+        r = radius * i / steps
+        alpha = int(45 * (1 - i / steps) ** 2)
+        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(*color, alpha))
+
+
+def _confetti(d: ImageDraw.ImageDraw, w: int, h: int) -> None:
+    """Scattered celebratory dots, kept to the top/bottom edges so the
+    headline, trophy, and team ribbon stay clean and readable."""
+    import random
+    rng = random.Random(7)  # fixed seed: deterministic, stable output
+    colors = [(255, 210, 90), (255, 255, 255), (120, 190, 255), (255, 130, 160)]
+    bands = [(24, 56), (h - 70, h - 30)]
+    for y0, y1 in bands:
+        for _ in range(18):
+            x = rng.uniform(24, w - 24)
+            y = rng.uniform(y0, y1)
+            s = rng.uniform(3, 7)
+            c = rng.choice(colors)
+            if rng.random() < 0.5:
+                d.ellipse([x, y, x + s, y + s], fill=c)
+            else:
+                d.rectangle([x, y, x + s, y + s * 0.5], fill=c)
+
+
+def _ribbon(d: ImageDraw.ImageDraw, cx: float, cy: float, w: float, h: float, color: tuple) -> None:
+    """A banner with notched ends and a drop shadow, instead of a plain box."""
+    x0, x1 = cx - w / 2, cx + w / 2
+    y0, y1 = cy - h / 2, cy + h / 2
+    notch = h * 0.28
+
+    shadow = _shade(color, 0.4)
+    d.rounded_rectangle([x0 + 10, y0 + 12, x1 + 10, y1 + 12], radius=18, fill=shadow)
+
+    d.rounded_rectangle([x0, y0, x1, y1], radius=18, fill=color)
+    d.polygon([(x0 - 26, y0 + notch), (x0 + 4, cy), (x0 - 26, y1 - notch)], fill=_shade(color, 0.75))
+    d.polygon([(x1 + 26, y0 + notch), (x1 - 4, cy), (x1 + 26, y1 - notch)], fill=_shade(color, 0.75))
+
+
 def _trophy(d: ImageDraw.ImageDraw, cx: float, cy: float, s: float) -> None:
+    gold_dark = (170, 125, 20)
     gold = (230, 180, 40)
+    gold_light = (255, 222, 120)
+
     cup_w, cup_h = s * 0.9, s * 0.7
-    d.rounded_rectangle(
-        [cx - cup_w / 2, cy - cup_h / 2, cx + cup_w / 2, cy + cup_h / 2],
-        radius=cup_w * 0.25, fill=gold,
-    )
+    top, bot = cy - cup_h / 2, cy + cup_h / 2
+
+    # cup: base gold, lighter wash on the upper-left third for a lit-metal look
+    d.rounded_rectangle([cx - cup_w / 2, top, cx + cup_w / 2, bot], radius=cup_w * 0.25, fill=gold)
+    d.pieslice([cx - cup_w / 2, top, cx - cup_w / 2 + cup_w * 0.7, top + cup_h * 0.9],
+               start=180, end=300, fill=gold_light)
+    d.rounded_rectangle([cx - cup_w / 2, bot - cup_h * 0.22, cx + cup_w / 2, bot],
+                         radius=cup_w * 0.2, fill=gold_dark)
+
+    # a star engraved on the cup face
+    _star(d, cx, cy - cup_h * 0.05, s * 0.16, gold_dark)
+
     hr = s * 0.28
     d.arc([cx - cup_w / 2 - hr * 1.4, cy - hr, cx - cup_w / 2 + hr * 0.4, cy + hr],
-          start=90, end=270, fill=gold, width=8)
+          start=90, end=270, fill=gold, width=9)
     d.arc([cx + cup_w / 2 - hr * 0.4, cy - hr, cx + cup_w / 2 + hr * 1.4, cy + hr],
-          start=270, end=90, fill=gold, width=8)
+          start=270, end=90, fill=gold, width=9)
+
     stem_w = s * 0.16
-    d.rectangle([cx - stem_w / 2, cy + cup_h / 2, cx + stem_w / 2, cy + cup_h / 2 + s * 0.28], fill=gold)
-    base_w = s * 0.6
-    by = cy + cup_h / 2 + s * 0.28
-    d.rounded_rectangle([cx - base_w / 2, by, cx + base_w / 2, by + s * 0.16], radius=6, fill=gold)
+    d.rectangle([cx - stem_w / 2, bot, cx + stem_w / 2, bot + s * 0.28], fill=gold)
+    base_w = s * 0.62
+    by = bot + s * 0.28
+    d.rounded_rectangle([cx - base_w / 2, by, cx + base_w / 2, by + s * 0.16], radius=6, fill=gold_dark)
+    plinth_w = s * 0.8
+    d.rounded_rectangle([cx - plinth_w / 2, by + s * 0.16, cx + plinth_w / 2, by + s * 0.28],
+                         radius=6, fill=gold)
+
+
+def _star(d: ImageDraw.ImageDraw, cx: float, cy: float, r: float, color: tuple) -> None:
+    import math
+    pts = []
+    for i in range(10):
+        angle = math.pi / 2 + i * math.pi / 5
+        rad = r if i % 2 == 0 else r * 0.42
+        pts.append((cx + rad * math.cos(angle), cy - rad * math.sin(angle)))
+    d.polygon(pts, fill=color)
 
 
 def _wrapped_text_centered(d, cx, cy, text, font, fill, max_width):

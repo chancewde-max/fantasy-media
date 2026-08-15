@@ -233,7 +233,12 @@ class Pipeline:
             return  # duplicate report, don't spam reaction tweets again
 
         self.state.set_meta("insider:last_real_report_at", _utcnow_iso())
+        self._publish_reaction_tweets(report, post_id, tip_key)
 
+    def _publish_reaction_tweets(self, report: str, post_id: str, key: str) -> None:
+        """Fan reaction tweets to a just-published Insider report. Claude reads
+        how inflammatory the report is and calibrates tone — mild reports get
+        an honor-system defense ('yall reaching'), juicy ones get roasted."""
         try:
             tweets = generate_reaction_tweets(
                 self.claude, report, self.cfg.tone_default,
@@ -242,9 +247,8 @@ class Pipeline:
             for i, tw in enumerate(tweets):
                 self._publish(
                     "tweet", tw["text"], tw["handle"], "🐦",
-                    event_key=f"{tip_key}:reax{i}",
+                    event_key=f"{key}:reax{i}",
                     metadata={"reacting_to": post_id},
-                    with_fan_comments=False,
                 )
         except Exception as exc:  # noqa: BLE001
             log.warning("Reaction tweet generation failed: %s", exc)
@@ -270,10 +274,12 @@ class Pipeline:
             return
 
         report = generate_fabricated_rumor(self.claude, self.cfg.tone_default)
-        self._publish(
+        post_id = self._publish(
             "insider_report", report, "@DiannaRussinni", "🕵️",
             event_key=slot_key, metadata={"source": "fabricated"},
         )
+        if post_id is not None:
+            self._publish_reaction_tweets(report, post_id, slot_key)
 
     def _notify_auth_problem(self, detail: str) -> None:
         msg = (

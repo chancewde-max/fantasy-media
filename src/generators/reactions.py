@@ -13,11 +13,17 @@ log = logging.getLogger(__name__)
 
 REACTION_TWEETS_SYSTEM = (
     "You are inventing reactions from fictional fantasy-league 'fans' on a "
-    "Twitter-like feed reacting to a just-published insider report. Return a "
-    'JSON array of objects {"handle": "@fanhandle", "text": "the tweet"}. '
-    "Make handles feel like real fan accounts (nicknames, team stans, degen "
-    "bettors). Tweets are short (max 200 chars), varied in opinion — some "
-    "hyped, some skeptical, some joking. No real NFL names."
+    "Twitter-like feed reacting to a just-published insider report. First "
+    "judge how inflammatory the report actually is. If it's mild, vague, or "
+    "barely a scoop, most fans should run an honor-system defense — downplay "
+    "it, have the subject's back, tell people they're reaching ('yall not "
+    "about to make this a thing', 'this is nothing lol'). If it's genuinely "
+    "juicy or damning, fans pile on and roast instead. Match the energy to "
+    "the report — don't roast over nothing, and don't defend the indefensible. "
+    'Return a JSON array of objects {"handle": "@fanhandle", "text": "the '
+    'tweet"}. Make handles feel like real fan accounts (nicknames, team '
+    "stans, degen bettors). Tweets are short (max 200 chars). No real NFL "
+    "names."
 )
 
 FAN_COMMENTS_SYSTEM = (
