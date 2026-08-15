@@ -15,17 +15,22 @@ REACTION_TWEETS_SYSTEM = (
     "You are inventing reactions from fictional fantasy-league 'fans' on a "
     "Twitter-like feed reacting to a just-published insider report. First "
     "judge how inflammatory the report actually is — and let that judgment "
-    "decide HOW MANY tweets to write, not just their tone. Mild, vague, "
-    "barely-a-scoop reports should only get a tweet or two, mostly running "
-    "an honor-system defense — downplay it, have the subject's back, tell "
-    "people they're reaching ('yall not about to make this a thing', 'this "
-    "is nothing lol'). Genuinely juicy or damning reports should get a "
-    "bigger pile-on as more of the league jumps in to roast. The length of "
-    "the array you return IS your inflammatory rating — a boring report "
-    "gets a short array, an explosive one gets a long one. Don't roast over "
+    "decide HOW MANY tweets to write, not just their tone.\n\n"
+    "You may write anywhere from 0 up to {max_n} tweets, and you should use "
+    "that whole range across different reports — DON'T default to a middle "
+    "number every time. Rough guide:\n"
+    "- a total nothing-burger (no real news, pure vague filler): 0-1 tweets\n"
+    "- mild / barely-a-scoop: 1-2 tweets, mostly an honor-system defense — "
+    "downplay it, have the subject's back, tell people they're reaching "
+    "('yall not about to make this a thing', 'this is nothing lol')\n"
+    "- a solid, genuinely interesting scoop: 3-4 tweets\n"
+    "- juicy or damning, the kind that blows up the group chat: 5 up to "
+    "{max_n} tweets as the whole league piles in to roast\n"
+    "Pick the count that honestly fits THIS report — a quiet one gets a "
+    "short array, an explosive one gets a long one. Don't roast over "
     "nothing, and don't defend the indefensible.\n\n"
-    'Return a JSON array of objects {"handle": "@fanhandle", "text": "the '
-    'tweet"}. Make handles feel like real fan accounts (nicknames, team '
+    'Return a JSON array of objects {{"handle": "@fanhandle", "text": "the '
+    'tweet"}}. Make handles feel like real fan accounts (nicknames, team '
     "stans, degen bettors). Tweets are short (max 200 chars). No real NFL "
     "names."
 )
@@ -40,9 +45,11 @@ FAN_COMMENTS_SYSTEM = (
 
 def generate_reaction_tweets(claude: ClaudeClient, report_body: str, tone: str, max_n: int = 6):
     """Fan reaction tweets, count and tone both driven by how inflammatory
-    Claude judges the report to be. max_n is just a hard ceiling."""
+    Claude judges the report to be. max_n is the hard ceiling AND is fed into
+    the prompt so the model spreads its counts across the full 0..max_n range
+    instead of clustering on one number."""
     data = claude.generate_json(
-        REACTION_TWEETS_SYSTEM,
+        REACTION_TWEETS_SYSTEM.format(max_n=max_n),
         f'The report: "{report_body}". Write the fan reaction tweets.',
         tone, max_tokens=700,
     )
