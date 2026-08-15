@@ -34,6 +34,17 @@ body {
 }
 .logo { font-weight: 800; letter-spacing: .3px; }
 
+.notify-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--card2); border: 1px solid var(--line); border-radius: 999px;
+  color: var(--muted); font-size: 12px; padding: 6px 12px; cursor: pointer;
+}
+.notify-btn:disabled { cursor: default; }
+.notify-label { display: none; }
+@media (min-width: 420px) {
+  .notify-label { display: inline; }
+}
+
 .content { flex: 1; padding: 12px 12px 90px; }
 
 /* feed */

@@ -196,3 +196,32 @@ class SupabaseWriter:
         )
         if resp.status_code not in (200, 204):
             raise SupabaseError(f"Update tip failed {resp.status_code}: {resp.text[:200]}")
+
+    # ----------------------------------------------------------- web push
+    def fetch_push_subscriptions(self) -> list[dict]:
+        resp = requests.get(
+            f"{self._base}/rest/v1/push_subscriptions",
+            headers=self._rest_headers,
+            params={
+                "league_id": f"eq.{self._league_id}",
+                "select": "endpoint,p256dh,auth",
+            },
+            timeout=TIMEOUT,
+        )
+        if resp.status_code != 200:
+            raise SupabaseError(
+                f"Fetch push subscriptions failed {resp.status_code}: {resp.text[:200]}"
+            )
+        return resp.json()
+
+    def delete_push_subscription(self, endpoint: str) -> None:
+        resp = requests.delete(
+            f"{self._base}/rest/v1/push_subscriptions",
+            headers={**self._rest_headers, "Prefer": "return=minimal"},
+            params={"endpoint": f"eq.{endpoint}"},
+            timeout=TIMEOUT,
+        )
+        if resp.status_code not in (200, 204):
+            raise SupabaseError(
+                f"Delete push subscription failed {resp.status_code}: {resp.text[:200]}"
+            )

@@ -25,6 +25,7 @@ from .generators.notifications import generate_notification
 from .generators.rankings import generate_rankings
 from .generators.reactions import generate_fan_comments, generate_reaction_tweets
 from .generators.tweets import generate_tweet
+from .push import notification_for, send_to_subscriptions
 from .state import State
 from .supabase_writer import SupabaseError, SupabaseWriter
 
@@ -55,6 +56,8 @@ class Pipeline:
             self.delivery = Delivery(
                 cfg.webhook_provider, cfg.webhook_url, cfg.groupme_bot_id
             )
+
+        self.push_enabled = bool(cfg.vapid_private_key) and self.supabase is not None
 
         os.makedirs(OUT_DIR, exist_ok=True)
 
@@ -122,11 +125,30 @@ class Pipeline:
             )
             if post_id and with_fan_comments and self.cfg.fan_comments_per_post > 0:
                 self._add_fan_comments(post_id, body)
+            if post_id and self.push_enabled:
+                self._send_push(post_type, author_handle, body)
         if self.delivery is not None:
             text = f"{emoji} {body}" if emoji else body
             imgs = [image_path] if image_path else []
             self.delivery.send(text, imgs)
         return post_id
+
+    def _send_push(self, post_type: str, author_handle: str, body: str) -> None:
+        try:
+            subs = self.supabase.fetch_push_subscriptions()
+            if not subs:
+                return
+            title, snippet = notification_for(post_type, author_handle, body)
+            dead = send_to_subscriptions(
+                subs, title, snippet, self.cfg.vapid_private_key, self.cfg.vapid_subject,
+            )
+            for endpoint in dead:
+                try:
+                    self.supabase.delete_push_subscription(endpoint)
+                except SupabaseError:
+                    pass
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Push notification failed: %s", exc)
 
     def _add_fan_comments(self, post_id: str, post_body: str) -> None:
         try:

@@ -105,6 +105,10 @@ class Config:
     fan_comments_per_post: int
     reaction_tweets_per_report: int
 
+    # Web Push (optional — silently disabled if no key is set)
+    vapid_private_key: str
+    vapid_subject: str
+
     # Misc
     state_db: str
     log_level: str
@@ -151,6 +155,8 @@ class Config:
             insider_fabricate_hours=_get_int_list("INSIDER_FABRICATE_HOURS", [7, 12, 18]),
             fan_comments_per_post=_get_int("FAN_COMMENTS_PER_POST", 2),
             reaction_tweets_per_report=_get_int("REACTION_TWEETS_PER_REPORT", 3),
+            vapid_private_key=_get("VAPID_PRIVATE_KEY", ""),
+            vapid_subject=_get("VAPID_SUBJECT", "mailto:admin@example.com"),
             state_db=_get("STATE_DB", "data/state.db"),
             log_level=_get("LOG_LEVEL", "INFO").upper(),
         )
