@@ -44,7 +44,11 @@ export default function NotifyButton() {
       await enablePush();
       setState("subscribed");
     } catch (e) {
-      setErr(e.message || "Couldn't enable notifications.");
+      const message = e.message || "Couldn't enable notifications.";
+      setErr(message);
+      // title/tooltip never shows on mobile taps — alert is blunt but the
+      // only thing guaranteed visible on every phone.
+      alert(message);
       setState(Notification.permission === "denied" ? "denied" : "unsubscribed");
     }
   }
@@ -53,12 +57,20 @@ export default function NotifyButton() {
 
   if (state === "ios-needs-install") {
     return (
-      <span
+      <button
         className="notify-btn notify-hint"
-        title="Tap Share, then 'Add to Home Screen', then open the app from your home screen icon to enable notifications."
+        onClick={() =>
+          alert(
+            "iPhone notifications need the app installed first:\n\n" +
+              "1. Tap the Share button in Safari\n" +
+              "2. Tap \"Add to Home Screen\"\n" +
+              "3. Open Fantasy Media from that new home screen icon\n" +
+              "4. Tap \"Enable notifications\" again from there"
+          )
+        }
       >
         🔕 <span className="notify-label">Add to Home Screen to enable</span>
-      </span>
+      </button>
     );
   }
 

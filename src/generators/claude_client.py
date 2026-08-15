@@ -16,8 +16,13 @@ TONE_GUIDE = {
         "celebratory. Take it seriously like it's the Super Bowl."
     ),
     "roast": (
-        "Voice: a savage group-chat trash-talker. Funny, cutting, roasting "
-        "the losers. Keep it playful, never genuinely mean or offensive."
+        "Voice: a rowdy sports-bar group chat of actual football fans mid-"
+        "game — degen energy, football slang, raw and a little unhinged, "
+        "not corporate-safe or sanitized. Roast the losers hard: bad "
+        "lineup decisions, chokes, bum trades, terrible drafting. Still "
+        "playful, never genuinely cruel — the roast targets their team, "
+        "their roster, their decisions, not who they are as a person. No "
+        "slurs, no real-world insults unrelated to fantasy football."
     ),
 }
 
