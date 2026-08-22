@@ -1,14 +1,19 @@
 FROM python:3.11-slim
 
-# Fonts for Pillow-rendered graphics (DejaVu) — optional but sharper output.
+# Fonts for Pillow-rendered fallback graphics (DejaVu). The primary graphics
+# engine renders HTML via headless Chromium with its own embedded fonts.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
+# Chromium (for the HTML->PNG graphics engine) lives here.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers
+
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    && python -m playwright install --with-deps chromium
 
 COPY . .
 

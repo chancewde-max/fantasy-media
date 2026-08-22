@@ -332,6 +332,29 @@ def manager_brief(first_name: str, year: int | None = None) -> str:
     return "; ".join(bits) + "." if bits else ""
 
 
+@lru_cache(maxsize=1)
+def team_meta() -> dict[str, dict]:
+    """{normalized current-season team name: {team, abbrev, logo_url}}."""
+    cy = str(current_year())
+    season = _seasons().get(cy, {})
+    out: dict[str, dict] = {}
+    for r in season.get("rosters", []):
+        m = r.get("metadata", {})
+        name = _clean_name(m.get("team_name", ""))
+        if not name:
+            continue
+        out[name.strip().lower()] = {
+            "team": name,
+            "abbrev": m.get("team_abbrev", ""),
+            "logo_url": m.get("avatar"),
+        }
+    return out
+
+
+def team_logo_url(team_name: str) -> str | None:
+    return (team_meta().get((team_name or "").strip().lower()) or {}).get("logo_url")
+
+
 def _owner_for_team(team_name: str, year: int) -> str | None:
     key = (team_name or "").strip().lower()
     for fn, teams in owner_teams().items():

@@ -258,7 +258,8 @@ class Pipeline:
     def _publish_meme(self, event, context: str) -> None:
         """An original league meme graphic reacting to the event."""
         try:
-            meme = meme_post(self.claude, context, self.cfg.tone_tweets, OUT_DIR, event.key)
+            team = event.data.get("winner") or event.data.get("team") or ""
+            meme = meme_post(self.claude, context, self.cfg.tone_tweets, OUT_DIR, event.key, team=team)
         except Exception as exc:  # noqa: BLE001
             log.warning("Meme generation failed: %s", exc)
             return

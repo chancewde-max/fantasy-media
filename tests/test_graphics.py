@@ -5,10 +5,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+import pytest
+
 from src import gifs
 from src.events import Event
 from src.generators import graphics
-from src.graphics import render
+from src.graphics import render, templates
+
+
+@pytest.fixture(autouse=True)
+def _force_pillow_fallback(monkeypatch):
+    """Keep generator tests fast + deterministic by skipping real Chromium and
+    exercising the Pillow fallback path (which still returns a valid PNG)."""
+    monkeypatch.setattr(graphics.html_render, "render_html", lambda *a, **k: None)
+    monkeypatch.setattr(graphics, "_logo", lambda team: None)
 
 
 class FakeClaude:
@@ -75,3 +85,20 @@ def test_meme_post(tmp_path):
 def test_meme_post_empty_when_no_text(tmp_path):
     post = graphics.meme_post(FakeClaude(json_reply={"top": "", "bottom": ""}), "ctx", "roast", str(tmp_path), "k2")
     assert post == {}
+
+
+def test_templates_render_html_strings():
+    m = templates.matchup_html("A", "B", "sa", "sb", "WEEK 1", "lore")
+    assert "<!doctype html>" in m and "GAME OF THE WEEK" in m and "font-face" in m
+    f = templates.final_score_html("A", 120.0, "B", 88.0, "BLOWOUT", "", "WEEK 2")
+    assert "FINAL" in f and "BLOWOUT" in f
+    r = templates.record_html("MILESTONE", "Back-to-Back Champ", "sub", "Back to back", ghost="2x")
+    assert "MILESTONE" in r
+    s = templates.stat_leader_html("TEAM OF THE WEEK", "A", "188.4", "POINTS", "sub")
+    assert "188.4" in s
+    assert "<div" in templates.meme_html("TOP", "BOTTOM", "A")
+
+
+def test_theme_is_deterministic():
+    assert templates.theme("Back to back") == templates.theme("BACK TO BACK")
+    assert templates.initials("The Island Boys") == "TI"
