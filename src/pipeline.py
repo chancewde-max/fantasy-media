@@ -27,6 +27,7 @@ from .generators.reactions import generate_fan_comments, generate_reaction_tweet
 from .generators.tweets import generate_tweet
 from . import gifs, league_history
 from .generators.graphics import (
+    breaking_post,
     final_score_post,
     gameday_post,
     meme_post,
@@ -271,6 +272,21 @@ class Pipeline:
             event_key=f"{event.key}:meme", metadata=event.data,
         )
 
+    def _publish_breaking(self, headline: str, key: str) -> None:
+        """A 'breaking news' graphic companion for an Insider drop, so the feed
+        carries real logo'd graphics even in the preseason (when there are no
+        game events yet)."""
+        try:
+            g = breaking_post(headline, OUT_DIR, key)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Breaking graphic failed: %s", exc)
+            return
+        self._publish(
+            "instagram", headline, "@LeagueGram", "🚨",
+            image_path=g.get("image_path"),
+            event_key=f"{key}:breaking", metadata={"source": "insider_graphic"},
+        )
+
     def _maybe_send_rankings(self, snap) -> None:
         if not snap.standings:
             return
@@ -345,6 +361,7 @@ class Pipeline:
         if post_id is None:
             return  # duplicate report, don't spam reaction tweets again
 
+        self._publish_breaking(report["headline"], tip_key)
         self.state.set_meta("insider:last_real_report_at", _utcnow_iso())
         self._publish_reaction_tweets(report["body"], post_id, tip_key)
 
@@ -408,6 +425,7 @@ class Pipeline:
             event_key=slot_key, metadata=metadata,
         )
         if post_id is not None:
+            self._publish_breaking(report["headline"], slot_key)
             self._publish_reaction_tweets(report["body"], post_id, slot_key)
 
     def _notify_auth_problem(self, detail: str) -> None:

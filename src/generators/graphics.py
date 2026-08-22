@@ -156,6 +156,18 @@ def record_post(out_dir: str, key: str, kicker: str, big_line: str, sub: str, te
     return {"caption": f"{big_line} — {sub}".strip(" —"), "image_path": image_path}
 
 
+def breaking_post(headline: str, out_dir: str, key: str) -> dict:
+    """An Insider 'breaking news' graphic, themed to whichever current team is
+    named in the headline (with its logo + a hero image when available)."""
+    team = league_history.detect_team(headline) or ""
+    hero = _hero(team)[0] if team else None
+    html = templates.breaking_html(headline, team=team, logo=_logo(team) if team else None, hero=hero)
+    image_path = _render(html, f"breaking_{key}", out_dir)
+    if image_path is None:
+        image_path = render.render_post_card(out_dir, f"breaking_{key}", headline, "THE INSIDER")
+    return {"image_path": image_path, "team": team}
+
+
 def meme_post(claude: ClaudeClient, context: str, tone: str, out_dir: str, key: str, team: str = "") -> dict:
     data = claude.generate_json(
         (

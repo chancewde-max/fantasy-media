@@ -251,6 +251,40 @@ def stat_leader_html(kicker, team, value, label, sub, ghost="MVP", logo=None, he
     return _doc(inner, css)
 
 
+def breaking_html(headline, team="", logo=None, hero=None) -> str:
+    """An Insider 'breaking news' poster: red BREAKING flag, big headline,
+    team logo/crest + player hero when known, Dianna byline."""
+    p, s = theme(team) if team else ("#c81e33", "#4a0c14")
+    # Show EITHER a player hero (bottom-right, behind text) OR a small team
+    # crest (top-right) — never both, and keep the headline clear of it.
+    if hero:
+        subject = _hero(hero, "right:-20px;bottom:0;height:700px")
+        badge = f"<div style='position:absolute;top:74px;right:60px;z-index:4'>{_crest(team,logo,110,18)}</div>" if team else ""
+    else:
+        subject = ""
+        badge = f"<div style='position:absolute;top:250px;right:60px;z-index:4'>{_crest(team,logo,170,24)}</div>" if team else ""
+    hl_right = 300 if (badge and not hero) else 60
+    css = f"""
+    #card{{width:1080px;height:1080px;position:relative;overflow:hidden;color:#fff;
+      background:linear-gradient(150deg,{s} 0%,#090e18 55%,#05080f 100%)}}
+    .flag{{position:absolute;top:70px;left:60px;background:linear-gradient(180deg,#ff3b3b,#b3121a);
+      font-size:38px;letter-spacing:4px;padding:12px 30px;border-radius:10px;z-index:5;
+      box-shadow:0 10px 30px rgba(220,20,20,.5)}}
+    .src{{position:absolute;top:152px;left:64px;font-size:30px;letter-spacing:5px;color:{GOLD};z-index:5}}
+    .hl{{position:absolute;left:60px;right:{hl_right}px;top:330px;font-size:88px;line-height:.98;
+      text-transform:uppercase;z-index:5;text-shadow:0 6px 30px rgba(0,0,0,.8)}}
+    .by{{position:absolute;bottom:56px;left:64px;font-size:32px;font-weight:600;color:#cdd8f2;z-index:5;
+      text-shadow:0 2px 12px rgba(0,0,0,.9)}}
+    """
+    inner = f"""<div id=card>
+      <div class=spot style="left:-120px;top:-80px;width:520px;height:520px;background:{p}66"></div>
+      {_shards(p,s)}{subject}<div class=grain></div><div class=vig></div>{badge}
+      <div class='flag num'>BREAKING</div><div class='src cond'>THE INSIDER</div>
+      <div class='hl num'>{headline}</div>
+      <div class='by cond'>Dianna Russinni · @DiannaRussinni</div></div>"""
+    return _doc(inner, css)
+
+
 def meme_html(top_text, bottom_text, team="") -> str:
     p, s = theme(team or top_text)
     css = f"""

@@ -355,6 +355,18 @@ def team_logo_url(team_name: str) -> str | None:
     return (team_meta().get((team_name or "").strip().lower()) or {}).get("logo_url")
 
 
+def detect_team(text: str) -> str | None:
+    """Return a current-season team name mentioned in the text (longest match
+    wins, so 'Back to back' beats a stray 'back'), or None."""
+    low = (text or "").lower()
+    best = None
+    for meta in team_meta().values():
+        name = meta["team"]
+        if name.lower() in low and (best is None or len(name) > len(best)):
+            best = name
+    return best
+
+
 @lru_cache(maxsize=1)
 def players_index() -> dict[str, dict]:
     """{full_name_lower: {name, espn_id, position}} across all seasons."""
