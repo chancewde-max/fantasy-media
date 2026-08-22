@@ -102,12 +102,16 @@ def _crest(team: str, logo: str | None, size: int = 190, radius: int = 26) -> st
 
 
 def _hero(img: str | None, css_pos: str) -> str:
-    """A player-headshot hero image (transparent PNG), with a soft drop shadow.
-    Empty string when we have no player image (templates then lean on crest)."""
+    """A player-headshot hero image, with a consistent drop shadow and a soft
+    bottom fade so every headshot blends into the card the same way (uniform
+    look, not a pasted-on rectangle). Empty string when there's no image."""
     if not img:
         return ""
     return (f"<img src='{img}' style=\"position:absolute;{css_pos};z-index:2;"
-            "filter:drop-shadow(0 24px 40px rgba(0,0,0,.6));object-fit:contain\">")
+            "object-fit:contain;object-position:bottom center;"
+            "filter:drop-shadow(0 18px 26px rgba(0,0,0,.55));"
+            "-webkit-mask-image:linear-gradient(to bottom,#000 76%,transparent 98%);"
+            "mask-image:linear-gradient(to bottom,#000 76%,transparent 98%)\">")
 
 
 def _doc(inner: str, css: str) -> str:
@@ -125,32 +129,35 @@ def matchup_html(team_a, team_b, sub_a, sub_b, week_label, lore,
     .top{{position:absolute;top:50px;width:100%;text-align:center;z-index:4}}
     .kick{{font-size:52px;letter-spacing:3px}}
     .wk{{font-size:30px;font-weight:700;letter-spacing:8px;color:#c9d6f2;margin-top:2px}}
-    .row{{position:absolute;left:60px;right:60px;display:flex;align-items:center;gap:32px;z-index:4}}
-    .rowA{{top:300px}} .rowB{{top:668px}}
-    .tname{{font-size:88px;line-height:.88;text-transform:uppercase;text-shadow:0 5px 24px rgba(0,0,0,.7)}}
+    /* crest + name on the LEFT; hero sits in a fixed right-hand zone, never
+       crossing center — both halves laid out identically. */
+    .row{{position:absolute;left:60px;right:430px;display:flex;align-items:center;gap:30px;z-index:4}}
+    .rowA{{top:172px;height:300px}} .rowB{{top:608px;height:300px}}
+    .tname{{font-size:74px;line-height:.9;text-transform:uppercase;text-shadow:0 5px 24px rgba(0,0,0,.75)}}
     .tsub{{font-size:33px;font-weight:600;color:#e6ecfb;margin-top:12px;letter-spacing:1px}}
-    .vs{{position:absolute;top:500px;left:50%;transform:translateX(-50%);width:132px;height:132px;
+    .vs{{position:absolute;top:474px;left:50%;transform:translateX(-50%);width:132px;height:132px;
       border-radius:50%;background:linear-gradient(145deg,#ff5a5a,#a80f16);display:flex;align-items:center;
       justify-content:center;font-size:58px;z-index:6;
       box-shadow:0 0 0 8px rgba(255,255,255,.06),0 16px 40px rgba(220,20,20,.6),inset 0 3px 0 rgba(255,255,255,.4)}}
-    .dvline{{position:absolute;top:566px;left:60px;right:60px;height:2px;
+    .dvline{{position:absolute;top:540px;left:60px;right:60px;height:2px;
       background:linear-gradient(90deg,transparent,rgba(255,255,255,.4),transparent);z-index:3}}
-    .foot{{position:absolute;bottom:50px;left:60px;right:60px;text-align:center;font-size:34px;font-weight:600;
+    .foot{{position:absolute;bottom:50px;left:60px;right:60px;text-align:center;font-size:32px;font-weight:600;
       color:#fff;background:rgba(0,0,0,.32);border:1px solid rgba(255,255,255,.14);
       padding:20px 26px;border-radius:18px;z-index:4}}
     """
     foot = f"<div class='foot cond'>{lore}</div>" if lore else ""
-    # heroes flank the outer edges, bleeding off-frame like a real matchup poster
-    heroes = (_hero(hero_a, "left:-40px;top:150px;height:520px") +
-              _hero(hero_b, "right:-40px;bottom:150px;height:520px;transform:scaleX(-1)"))
+    # identical hero zones: both faces in a fixed right-hand column, clear of
+    # the names and the center VS badge
+    heroes = (_hero(hero_a, "right:40px;top:60px;height:372px;width:360px") +
+              _hero(hero_b, "right:40px;top:600px;height:372px;width:360px"))
     inner = f"""<div id=card>
       <div class=spot style="left:-140px;top:120px;width:420px;height:420px;background:{pa}66"></div>
       <div class=spot style="right:-140px;bottom:120px;width:420px;height:420px;background:{pb}66"></div>
       {_shards(pa,pb)}{heroes}<div class=grain></div><div class=vig></div>
       <div class=top><div class='kick num foil'>GAME OF THE WEEK</div><div class='wk cond'>{week_label}</div></div>
-      <div class='row rowA'>{_crest(team_a,logo_a)}<div><div class='tname num'>{team_a}</div><div class='tsub cond'>{sub_a}</div></div></div>
+      <div class='row rowA'>{_crest(team_a,logo_a,150,24)}<div><div class='tname num'>{team_a}</div><div class='tsub cond'>{sub_a}</div></div></div>
       <div class=dvline></div><div class='vs num'>VS</div>
-      <div class='row rowB'>{_crest(team_b,logo_b)}<div><div class='tname num'>{team_b}</div><div class='tsub cond'>{sub_b}</div></div></div>
+      <div class='row rowB'>{_crest(team_b,logo_b,150,24)}<div><div class='tname num'>{team_b}</div><div class='tsub cond'>{sub_b}</div></div></div>
       {foot}</div>"""
     return _doc(inner, css)
 
