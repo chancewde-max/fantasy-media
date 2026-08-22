@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../supabaseClient";
+import CommentComposer from "./CommentComposer.jsx";
 
 // Same fixed identity everywhere Dianna appears, independent of whatever
 // handle a given post happens to carry — one consistent face for the beat.
@@ -68,7 +69,7 @@ export default function InsiderCard({ post, onChange }) {
         </div>
       </div>
 
-      {open && comments.length > 0 && (
+      {open && (
         <div className="espn-comments">
           {comments
             .slice()
@@ -79,6 +80,7 @@ export default function InsiderCard({ post, onChange }) {
                 {c.body}
               </div>
             ))}
+          <CommentComposer postId={post.id} onPosted={onChange} />
         </div>
       )}
     </article>

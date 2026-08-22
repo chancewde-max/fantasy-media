@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../supabaseClient";
+import CommentComposer from "./CommentComposer.jsx";
 
 function timeAgo(iso) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -57,7 +58,7 @@ export default function ESPNCard({ post, onChange }) {
         </div>
       </div>
 
-      {open && comments.length > 0 && (
+      {open && (
         <div className="espn-comments">
           {comments
             .slice()
@@ -68,6 +69,7 @@ export default function ESPNCard({ post, onChange }) {
                 {c.body}
               </div>
             ))}
+          <CommentComposer postId={post.id} onPosted={onChange} />
         </div>
       )}
     </article>

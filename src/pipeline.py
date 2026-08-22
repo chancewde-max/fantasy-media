@@ -22,6 +22,7 @@ from .generators.articles import generate_article
 from .generators.claude_client import ClaudeClient
 from .generators.insider import generate_fabricated_rumor, generate_insider_report
 from .generators.notifications import generate_notification
+from .generators.pundits import generate_pundit_takes
 from .generators.rankings import generate_rankings
 from .generators.reactions import generate_fan_comments, generate_reaction_tweets
 from .generators.tweets import generate_tweet
@@ -370,6 +371,7 @@ class Pipeline:
         self._publish_breaking(report["headline"], tip_key)
         self.state.set_meta("insider:last_real_report_at", _utcnow_iso())
         self._publish_reaction_tweets(report["body"], post_id, tip_key)
+        self._publish_pundit_takes(report["body"], post_id, tip_key)
 
     def _insider_context(self) -> str:
         """League history + any ongoing manufactured storylines, combined
@@ -408,6 +410,21 @@ class Pipeline:
         except Exception as exc:  # noqa: BLE001
             log.warning("Reaction tweet generation failed: %s", exc)
 
+    def _publish_pundit_takes(self, report: str, post_id: str, key: str) -> None:
+        """Dan Orlovsky's and Stephen A. Smith's reactions to a just-published
+        Insider report — always these two fixed personas giving their take on
+        what Dianna already reported, never inventing news of their own."""
+        try:
+            takes = generate_pundit_takes(self.claude, report, self.cfg.tone_default)
+            for i, take in enumerate(takes):
+                self._publish(
+                    "tweet", take["text"], take["handle"], "🎙️",
+                    event_key=f"{key}:pundit{i}",
+                    metadata={"reacting_to": post_id},
+                )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Pundit take generation failed: %s", exc)
+
     def run_scheduled_fabrication(self) -> None:
         """Scheduled checkpoint (INSIDER_FABRICATE_HOURS, default 7/12/18 UTC):
         if no real tip has been reported since the previous checkpoint, invent
@@ -440,6 +457,7 @@ class Pipeline:
         if post_id is not None:
             self._publish_breaking(report["headline"], slot_key)
             self._publish_reaction_tweets(report["body"], post_id, slot_key)
+            self._publish_pundit_takes(report["body"], post_id, slot_key)
 
     def decay_storylines(self) -> None:
         """Daily cooldown for ongoing storylines (see scheduler). Keeps old

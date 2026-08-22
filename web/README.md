@@ -27,13 +27,20 @@ npm run dev                     # http://localhost:5173
 6. Deploy → open the URL on your phone → **Add to Home Screen** for an app feel.
 
 ## Auth
-There isn't any. The feed, reactions, and tip form are open to anyone with
-the link — no sign-in screen, no email. Row-level security still protects
-writes to tables the app doesn't touch (e.g. `memberships`), but reads and
-the writes the app makes (tips, reactions) are public. Reactions aren't
-deduped per-person since there's no login to key them on — every tap adds one.
+There isn't any. The feed, reactions, tip form, and comments are open to
+anyone with the link — no sign-in screen, no email. Row-level security still
+protects writes to tables the app doesn't touch (e.g. `memberships`), but
+reads and the writes the app makes (tips, reactions, comments) are public.
+Reactions aren't deduped per-person since there's no login to key them on —
+every tap adds one. Comments get a lightweight per-device handle (stored in
+`localStorage`, editable by tapping it in the composer) so a person's
+comments look consistent across visits — not a real identity, same trust
+level as tips and reactions.
 
 ## Before it looks alive
-Run these once in the Supabase SQL Editor (in order):
-`supabase/schema.sql` → `schema_v2.sql` → `schema_v3.sql` → `schema_v4.sql` →
-`seed_demo.sql` (the last one drops in sample posts so the feed isn't empty).
+Run these once in the Supabase SQL Editor, in order: `schema.sql` →
+`schema_v2.sql` → `schema_v3.sql` → `schema_v4.sql` → `schema_v5.sql` →
+`schema_v6.sql` → `schema_v7.sql` → `schema_v8.sql` → `seed_demo.sql` (the
+last one drops in sample posts so the feed isn't empty). `schema_v8.sql` is
+required for the comment composer to work — without it, comment writes are
+silently rejected by RLS.

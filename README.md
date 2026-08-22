@@ -23,7 +23,7 @@ fetch ESPN state ─▶ detect events ─▶ de-dup (SQLite) ─▶ generate (Cl
 | `src/state.py` | SQLite de-dup so an event never fires twice. |
 | `src/events.py` | Detects matchup results, blowout, nailbiter, high/low scorer, transactions, ranking movement. Event keys are season-scoped, so a new season never collides with last year's de-dup history. |
 | `src/storylines.py` | Persistent narrative memory for the Insider's manufactured drama — a rumor can start, escalate, or wrap up a running storyline instead of resetting every drop. Heat decays daily so old bits fade out on their own. |
-| `src/generators/` | Four content types — notifications, tweets, instagram, rankings. |
+| `src/generators/` | Four content types — notifications, tweets, instagram, rankings — plus `insider.py` (anonymous scoops), `reactions.py` (crowd reaction tweets/comments), and `pundits.py` (Dan Orlovsky + Stephen A. Smith reacting to every Insider drop). |
 | `src/graphics/render.py` | Pillow-rendered post + power-ranking cards (easy to restyle at the top of the file). |
 | `src/delivery.py` | Discord / Slack / GroupMe webhook push. |
 | `src/scheduler.py` | APScheduler polling loop; a bad cycle never kills the service. |

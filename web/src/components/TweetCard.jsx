@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../supabaseClient";
+import CommentComposer from "./CommentComposer.jsx";
 
 // Stable-per-handle fake profile photo (a real-looking but not-a-real-person
 // stock face) so accounts feel like accounts, not initials in a circle.
@@ -129,7 +130,7 @@ export default function TweetCard({ post, onChange }) {
         </div>
       </div>
 
-      {open && comments.length > 0 && (
+      {open && (
         <div className="tw-comments">
           {comments
             .slice()
@@ -140,6 +141,7 @@ export default function TweetCard({ post, onChange }) {
                 {c.body}
               </div>
             ))}
+          <CommentComposer postId={post.id} onPosted={onChange} dark />
         </div>
       )}
     </article>

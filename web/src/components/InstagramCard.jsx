@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "../supabaseClient";
+import CommentComposer from "./CommentComposer.jsx";
 
 // Stable-per-handle fake profile photo (a real-looking but not-a-real-person
 // stock face) so accounts feel like accounts, not initials in a circle.
@@ -144,13 +145,15 @@ export default function InstagramCard({ post, onChange }) {
         <span className="ig-username">{handle}</span> {post.body}
       </div>
 
-      {comments.length > 0 && (
-        <button className="ig-viewcomments" onClick={() => setOpen((o) => !o)}>
-          {open ? "Hide comments" : `View all ${comments.length} comments`}
-        </button>
-      )}
+      <button className="ig-viewcomments" onClick={() => setOpen((o) => !o)}>
+        {open
+          ? "Hide comments"
+          : comments.length > 0
+          ? `View all ${comments.length} comments`
+          : "Add a comment"}
+      </button>
 
-      {open && comments.length > 0 && (
+      {open && (
         <div className="ig-comments">
           {comments
             .slice()
@@ -163,6 +166,7 @@ export default function InstagramCard({ post, onChange }) {
                 {c.body}
               </div>
             ))}
+          <CommentComposer postId={post.id} onPosted={onChange} dark />
         </div>
       )}
 
