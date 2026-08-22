@@ -449,17 +449,59 @@ def _marquee_in_season(team_name: str, year: int) -> dict | None:
     return None
 
 
-def marquee_player(team_name: str, year: int | None = None) -> dict | None:
-    """A notable rostered player for a team, for a graphic's hero image.
+def _ppg_leader_in_season(team_name: str, year: int, min_weeks: int = 6) -> dict | None:
+    """The player with the highest average points-per-week for this team that
+    season, from the export's per-player weekly scoring."""
+    season = _seasons().get(str(year), {})
+    players = season.get("players") or {}
+    key = (team_name or "").strip().lower()
+    rid = None
+    for r in season.get("rosters", []):
+        if _clean_name(r.get("metadata", {}).get("team_name", "")).strip().lower() == key:
+            rid = r["roster_id"]
+            break
+    if rid is None:
+        return None
+    totals: dict[str, list] = {}  # pid -> [sum_points, weeks]
+    for entries in season.get("matchups_by_week", {}).values():
+        for e in entries:
+            if e.get("roster_id") != rid:
+                continue
+            for pid, pts in (e.get("players_points") or {}).items():
+                # Count only weeks with real scoring, so a preseason export
+                # (all-zero weeks) yields no leader and we fall back to a
+                # season that was actually played.
+                if not pts:
+                    continue
+                t = totals.setdefault(pid, [0.0, 0])
+                t[0] += float(pts)
+                t[1] += 1
+    best = None
+    for pid, (total, weeks) in totals.items():
+        if weeks < min_weeks:
+            continue
+        pl = players.get(pid)
+        if not pl or not pl.get("espn_id"):
+            continue
+        avg = total / weeks
+        if best is None or avg > best[0]:
+            best = (avg, {"name": pl.get("full_name"), "espn_id": pl.get("espn_id"),
+                          "position": pl.get("position", ""), "ppg": round(avg, 1)})
+    return best[1] if best else None
 
-    Prefers the current season; if its roster isn't populated yet (e.g. a
-    preseason export before the draft), it walks back to the most recent season
-    that has a roster for this owner's team — following the owner across
-    renames — so a face still shows. Once the current season's roster fills in,
-    it's used automatically. Returns None only if no season has a roster.
+
+def marquee_player(team_name: str, year: int | None = None) -> dict | None:
+    """The team's face for a graphic: the player who averaged the most points
+    per week for that team.
+
+    Prefers the current season; if it has no scoring yet (e.g. preseason), it
+    walks back to the most recent season with data for this owner's team —
+    following the owner across renames — so a real face still shows, and
+    auto-switches to the current season once games are played. Falls back to a
+    positional pick if per-week scoring isn't available. None only if nothing
+    is on record.
     """
     year = year or current_year()
-    # follow this team's owner back through their prior team names
     fn = _owner_for_team(team_name, year)
     names_by_year = owner_teams().get(fn, {}) if fn else {}
     for y in sorted((int(y) for y in _seasons()), reverse=True):
@@ -468,7 +510,7 @@ def marquee_player(team_name: str, year: int | None = None) -> dict | None:
         name_that_year = names_by_year.get(y, team_name if y == year else None)
         if not name_that_year:
             continue
-        found = _marquee_in_season(name_that_year, y)
+        found = _ppg_leader_in_season(name_that_year, y) or _marquee_in_season(name_that_year, y)
         if found:
             return found
     return None
