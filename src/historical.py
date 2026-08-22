@@ -22,17 +22,32 @@ from .generators.instagram import SYSTEM as INSTAGRAM_SYSTEM
 from .generators.notifications import SYSTEM as NOTIFICATION_SYSTEM
 from .generators.reactions import generate_fan_comments
 from .graphics import html_render, logos, players, templates
-from .graphics.render import render_power_rankings
+from .graphics.render import (
+    render_champion_card,
+    render_gameday_matchup,
+    render_post_card,
+    render_power_rankings,
+    render_record_card,
+)
 from .supabase_writer import SupabaseError, SupabaseWriter
 
 log = logging.getLogger(__name__)
 
 OUT_DIR = "out"
-BACKFILL_VERSION = "v2"
+BACKFILL_VERSION = "v3"
 
 
-def _render(html: str, name: str) -> str | None:
-    return html_render.render_html(html, os.path.join(OUT_DIR, f"{name}.png"))
+def _graphic(html: str, name: str, fallback) -> str:
+    """Render via the HTML engine; if that fails, use the Pillow fallback so a
+    graphic post is never left without an image."""
+    path = html_render.render_html(html, os.path.join(OUT_DIR, f"{name}.png"))
+    if path:
+        return path
+    try:
+        return fallback()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Pillow fallback failed for %s: %s", name, exc)
+        return None
 
 
 def _logo(team: str):
@@ -68,11 +83,13 @@ def _publish_season(claude: ClaudeClient, supabase: SupabaseWriter, year: int, t
     if summary["runner_up"]:
         facts += f", beating {summary['runner_up']} {summary['champ_score']}".rstrip()
     caption = claude.generate(INSTAGRAM_SYSTEM, f"{facts}. Write the caption.", tone, max_tokens=200)
+    sub = (f"def. {summary['runner_up']} {summary['champ_score']}").strip()
     html = templates.record_html(
-        f"{year} CHAMPION", champ, (f"def. {summary['runner_up']} {summary['champ_score']}").strip(),
-        champ, ghost=str(year), logo=_logo(champ), hero=_hero(champ),
+        f"{year} CHAMPION", champ, sub, champ, ghost=str(year), logo=_logo(champ), hero=_hero(champ),
     )
-    img = _render(html, f"hist_{year}_champ")
+    img = _graphic(html, f"hist_{year}_champ",
+                   lambda: render_champion_card(OUT_DIR, f"hist_{year}_champ", f"{year} SEASON",
+                                                champ, summary["champ_score"]))
     _publish(claude, supabase, "instagram", caption, "@LeagueGram",
              event_key=f"hist:{BACKFILL_VERSION}:{year}:champ", when=jan, tone=tone, image_path=img)
 
@@ -80,10 +97,10 @@ def _publish_season(claude: ClaudeClient, supabase: SupabaseWriter, year: int, t
     for i, fact in enumerate(league_history.playoff_facts().get(year, [])):
         team = league_history.detect_team(fact) or champ
         cap = claude.generate(NOTIFICATION_SYSTEM, f"{fact} Write the alert.", tone, max_tokens=160)
-        bhtml = templates.breaking_html(
-            _short(fact), team=team, logo=_logo(team), hero=_hero(team),
-        )
-        bimg = _render(bhtml, f"hist_{year}_po{i}")
+        headline = _short(fact)
+        bhtml = templates.breaking_html(headline, team=team, logo=_logo(team), hero=_hero(team))
+        bimg = _graphic(bhtml, f"hist_{year}_po{i}",
+                        lambda h=headline: render_post_card(OUT_DIR, f"hist_{year}_po{i}", h, "THE INSIDER"))
         _publish(claude, supabase, "instagram", cap, "@LeagueGram",
                  event_key=f"hist:{BACKFILL_VERSION}:{year}:po{i}",
                  when=f"{year}-12-22T20:0{i}:00+00:00", tone=tone, image_path=bimg,
@@ -121,7 +138,9 @@ def _publish_current_storylines(claude: ClaudeClient, supabase: SupabaseWriter, 
         html = templates.record_html(f"{year} SEASON", big, f"{cur_team} runs it back",
                                      cur_team, ghost=(f"{len(chips)}x" if len(chips) > 1 else str(last)),
                                      logo=_logo(cur_team), hero=_hero(cur_team))
-        img = _render(html, f"hist_{year}_reigning")
+        img = _graphic(html, f"hist_{year}_reigning",
+                       lambda: render_record_card(OUT_DIR, f"hist_{year}_reigning", f"{year} SEASON",
+                                                  big, f"{cur_team} runs it back"))
         _publish(claude, supabase, "instagram", cap, "@LeagueGram",
                  event_key=f"hist:{BACKFILL_VERSION}:{year}:reigning",
                  when=f"{year}-08-20T18:00:00+00:00", tone=tone, image_path=img)
@@ -135,7 +154,11 @@ def _publish_current_storylines(claude: ClaudeClient, supabase: SupabaseWriter, 
             f"{year} RIVALRY", note, logo_a=_logo(a_team), logo_b=_logo(b_team),
             hero_a=_hero(a_team), hero_b=_hero(b_team),
         )
-        img = _render(html, f"hist_{year}_rivalry{i}")
+        img = _graphic(html, f"hist_{year}_rivalry{i}",
+                       lambda a=a_team, b=b_team, nt=note: render_gameday_matchup(
+                           OUT_DIR, f"hist_{year}_rivalry{i}", a, b,
+                           sub_a=league_history.team_tagline(a), sub_b=league_history.team_tagline(b),
+                           week_label=f"{year} RIVALRY", lore=nt))
         _publish(claude, supabase, "instagram", cap, "@LeagueGram",
                  event_key=f"hist:{BACKFILL_VERSION}:{year}:rivalry{i}",
                  when=f"{year}-08-21T18:0{i}:00+00:00", tone=tone, image_path=img)

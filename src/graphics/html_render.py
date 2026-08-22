@@ -69,37 +69,44 @@ def _chromium_path() -> str | None:
 
 
 def available() -> bool:
-    if _chromium_path() is None:
-        return False
     try:
         import playwright  # noqa: F401
-        return True
     except ImportError:
         return False
+    return True
 
 
 def render_html(html: str, out_path: str, width: int = 1080, height: int = 1080,
                 scale: int = 2, selector: str = "#card") -> str | None:
     """Render an HTML string to a PNG at out_path. Returns the path, or None if
     Chromium/Playwright isn't available or rendering failed."""
-    exe = _chromium_path()
-    if exe is None:
-        return None
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
+        log.warning("HTML render skipped: playwright not installed.")
         return None
 
+    args = ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
+            "--force-color-profile=srgb"]
+    exe = _chromium_path()
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(executable_path=exe, args=["--no-sandbox", "--force-color-profile=srgb"])
+            # Prefer Playwright's own managed browser (it knows where it
+            # installed it); fall back to an explicitly-discovered binary.
+            try:
+                browser = p.chromium.launch(args=args)
+            except Exception as launch_exc:  # noqa: BLE001
+                if not exe:
+                    raise
+                log.warning("Default chromium launch failed (%s); trying %s", launch_exc, exe)
+                browser = p.chromium.launch(executable_path=exe, args=args)
             page = browser.new_page(viewport={"width": width, "height": height}, device_scale_factor=scale)
-            page.set_content(html, wait_until="networkidle")
+            page.set_content(html, wait_until="load")
             target = page.locator(selector)
             (target if target.count() else page).screenshot(path=out_path)
             browser.close()
         return out_path
     except Exception as exc:  # noqa: BLE001
-        log.warning("HTML render failed (%s) — falling back.", exc)
+        log.warning("HTML render failed (chromium_path=%s): %s", exe, exc)
         return None
