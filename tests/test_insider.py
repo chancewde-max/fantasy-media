@@ -91,6 +91,60 @@ def test_fabricated_rumor_does_not_reference_a_real_tip():
     assert "No tips" in claude.last_prompt
 
 
+def test_report_with_no_storyline_fields_defaults_to_none():
+    claude = FakeClaude(json_reply={"headline": "h", "body": "b"})
+    result = generate_insider_report(claude, "a tip", "roast")
+    assert result["storyline"] == {"action": "none"}
+
+
+def test_report_starting_a_new_storyline():
+    claude = FakeClaude(json_reply={
+        "headline": "h", "body": "b",
+        "storyline_action": "new",
+        "storyline_title": "The Josh Benching Scandal",
+        "canon_note": "Josh benched his own RB1 in a big week.",
+    })
+    result = generate_insider_report(claude, "a tip", "roast")
+    assert result["storyline"] == {
+        "action": "new",
+        "title": "The Josh Benching Scandal",
+        "canon_note": "Josh benched his own RB1 in a big week.",
+    }
+
+
+def test_report_continuing_a_storyline():
+    claude = FakeClaude(json_reply={
+        "headline": "h", "body": "b",
+        "storyline_action": "continue",
+        "storyline_key": "the-josh-benching-scandal",
+        "canon_note": "Josh's benched RB1 went off for 30 points on the bench.",
+    })
+    result = generate_insider_report(claude, "a tip", "roast")
+    assert result["storyline"] == {
+        "action": "continue",
+        "key": "the-josh-benching-scandal",
+        "canon_note": "Josh's benched RB1 went off for 30 points on the bench.",
+    }
+
+
+def test_storyline_new_without_title_is_dropped():
+    claude = FakeClaude(json_reply={
+        "headline": "h", "body": "b",
+        "storyline_action": "new", "canon_note": "x",
+    })
+    result = generate_insider_report(claude, "a tip", "roast")
+    assert result["storyline"] == {"action": "none"}
+
+
+def test_storyline_continue_without_key_is_dropped():
+    claude = FakeClaude(json_reply={
+        "headline": "h", "body": "b",
+        "storyline_action": "continue", "canon_note": "x",
+    })
+    result = generate_insider_report(claude, "a tip", "roast")
+    assert result["storyline"] == {"action": "none"}
+
+
 def test_clean_reactions_normalizes_handles():
     data = [
         {"handle": "degen_dan", "text": "no way"},

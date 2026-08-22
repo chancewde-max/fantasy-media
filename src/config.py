@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 
@@ -58,6 +59,16 @@ def _tone(name: str, fallback: str) -> str:
     if val not in VALID_TONES:
         raise ConfigError(f"{name} must be one of {VALID_TONES}, got {val!r}")
     return val
+
+
+def _current_nfl_season(today: datetime | None = None) -> int:
+    """The NFL/fantasy season a given date falls in. A season (e.g. 2026)
+    runs from around September through the following February, so January
+    and February still belong to the PREVIOUS calendar year's season.
+    Lets SEASON default to "auto" and roll over on its own every year
+    instead of needing a manual bump."""
+    d = today or datetime.now(timezone.utc)
+    return d.year if d.month >= 3 else d.year - 1
 
 
 class ConfigError(RuntimeError):
@@ -132,9 +143,18 @@ class Config:
                 f"POST_TARGET must be supabase|webhook|both, got {post_target!r}"
             )
 
+        season_raw = os.environ.get("SEASON", "auto").strip()
+        if season_raw == "" or season_raw.lower() == "auto":
+            season = _current_nfl_season()
+        else:
+            try:
+                season = int(season_raw)
+            except ValueError:
+                raise ConfigError(f"SEASON must be an integer or 'auto', got {season_raw!r}")
+
         cfg = cls(
             league_id=_get_int("LEAGUE_ID", 0),
-            season=_get_int("SEASON", 0),
+            season=season,
             espn_s2=_get("ESPN_S2", required=True),
             swid=_get("SWID", required=True),
             anthropic_api_key=_get("ANTHROPIC_API_KEY", required=True),
@@ -167,8 +187,6 @@ class Config:
 
         if cfg.league_id == 0:
             raise ConfigError("LEAGUE_ID must be set")
-        if cfg.season == 0:
-            raise ConfigError("SEASON must be set")
         if post_target in {"supabase", "both"}:
             if not cfg.supabase_url:
                 raise ConfigError("SUPABASE_URL is required when POST_TARGET includes supabase")

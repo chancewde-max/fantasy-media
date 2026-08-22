@@ -29,6 +29,7 @@ def _final_matchups(snap: LeagueSnapshot) -> list[dict[str, Any]]:
 def detect_events(snap: LeagueSnapshot, tz_name: str = "UTC") -> list[Event]:
     events: list[Event] = []
     week = snap.week
+    season = snap.season
     finals = _final_matchups(snap)
 
     # Game of the Week — picked from ALL of this week's matchups (final or
@@ -41,7 +42,7 @@ def detect_events(snap: LeagueSnapshot, tz_name: str = "UTC") -> list[Event]:
             events.append(
                 Event(
                     kind="game_of_the_week",
-                    key=f"w{week}:gotw",
+                    key=f"{season}:w{week}:gotw",
                     title=f"Week {week} Game of the Week: {gotw['team_a']} vs {gotw['team_b']}",
                     data={"week": week, **gotw},
                 )
@@ -54,7 +55,7 @@ def detect_events(snap: LeagueSnapshot, tz_name: str = "UTC") -> list[Event]:
         w_score = max(m["home_score"], m["away_score"])
         l_score = min(m["home_score"], m["away_score"])
         margin = round(w_score - l_score, 2)
-        key = f"w{week}:matchup:{'|'.join(sorted([m['home'], m['away']]))}"
+        key = f"{season}:w{week}:matchup:{'|'.join(sorted([m['home'], m['away']]))}"
         events.append(
             Event(
                 kind="matchup_final",
@@ -84,7 +85,7 @@ def detect_events(snap: LeagueSnapshot, tz_name: str = "UTC") -> list[Event]:
         events.append(
             Event(
                 kind="blowout",
-                key=f"w{week}:blowout",
+                key=f"{season}:w{week}:blowout",
                 title="Blowout of the week",
                 data={
                     "week": week,
@@ -99,7 +100,7 @@ def detect_events(snap: LeagueSnapshot, tz_name: str = "UTC") -> list[Event]:
         events.append(
             Event(
                 kind="nailbiter",
-                key=f"w{week}:nailbiter",
+                key=f"{season}:w{week}:nailbiter",
                 title="Closest game of the week",
                 data={
                     "week": week,
@@ -114,7 +115,7 @@ def detect_events(snap: LeagueSnapshot, tz_name: str = "UTC") -> list[Event]:
         events.append(
             Event(
                 kind="high",
-                key=f"w{week}:high",
+                key=f"{season}:w{week}:high",
                 title="Highest scorer",
                 data={"week": week, "team": high[0], "score": high[1]},
             )
@@ -122,7 +123,7 @@ def detect_events(snap: LeagueSnapshot, tz_name: str = "UTC") -> list[Event]:
         events.append(
             Event(
                 kind="low",
-                key=f"w{week}:low",
+                key=f"{season}:w{week}:low",
                 title="Lowest scorer",
                 data={"week": week, "team": low[0], "score": low[1]},
             )

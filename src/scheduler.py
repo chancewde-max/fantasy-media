@@ -59,6 +59,18 @@ def run(cfg: Config) -> None:
         max_instances=1,
         coalesce=True,
     )
+    # Cool ongoing storylines down once a day so old beefs fade out instead
+    # of lingering forever.
+    scheduler.add_job(
+        _safe_storyline_decay,
+        "cron",
+        hour=3,
+        minute=0,
+        args=[pipeline],
+        id="storyline_decay",
+        max_instances=1,
+        coalesce=True,
+    )
     log.info(
         "Scheduler started — polling every %d min, checking tips every %d min, "
         "Insider fabrication checkpoints at %s UTC. Ctrl-C to stop.",
@@ -111,3 +123,10 @@ def _safe_fabrication(pipeline: Pipeline) -> None:
         pipeline.run_scheduled_fabrication()
     except Exception as exc:  # noqa: BLE001 - never let the scheduler die
         log.exception("Insider fabrication raised, continuing: %s", exc)
+
+
+def _safe_storyline_decay(pipeline: Pipeline) -> None:
+    try:
+        pipeline.decay_storylines()
+    except Exception as exc:  # noqa: BLE001 - never let the scheduler die
+        log.exception("Storyline decay raised, continuing: %s", exc)

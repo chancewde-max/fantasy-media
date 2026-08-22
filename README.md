@@ -21,7 +21,8 @@ fetch ESPN state ─▶ detect events ─▶ de-dup (SQLite) ─▶ generate (Cl
 | --- | --- |
 | `src/espn_client.py` | Wraps `espn-api`, returns a plain `LeagueSnapshot`. Auth vs. fetch errors are separated. |
 | `src/state.py` | SQLite de-dup so an event never fires twice. |
-| `src/events.py` | Detects matchup results, blowout, nailbiter, high/low scorer, transactions, ranking movement. |
+| `src/events.py` | Detects matchup results, blowout, nailbiter, high/low scorer, transactions, ranking movement. Event keys are season-scoped, so a new season never collides with last year's de-dup history. |
+| `src/storylines.py` | Persistent narrative memory for the Insider's manufactured drama — a rumor can start, escalate, or wrap up a running storyline instead of resetting every drop. Heat decays daily so old bits fade out on their own. |
 | `src/generators/` | Four content types — notifications, tweets, instagram, rankings. |
 | `src/graphics/render.py` | Pillow-rendered post + power-ranking cards (easy to restyle at the top of the file). |
 | `src/delivery.py` | Discord / Slack / GroupMe webhook push. |
@@ -50,7 +51,7 @@ keys to your ESPN session; they stay in `.env`, out of git, and out of logs.
 | Var | What |
 | --- | --- |
 | `LEAGUE_ID` | From your ESPN league URL. |
-| `SEASON` | e.g. `2026`. |
+| `SEASON` | `auto` (default) figures out the current fantasy season from today's date and rolls over on its own every year — set an explicit year (e.g. `2026`) only to override. |
 | `ESPN_S2`, `SWID` | Auth cookies (below). |
 | `ANTHROPIC_API_KEY` | For Claude text generation. |
 | `WEBHOOK_PROVIDER` | `discord` \| `slack` \| `groupme`. |

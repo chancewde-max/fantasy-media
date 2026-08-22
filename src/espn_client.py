@@ -33,6 +33,7 @@ class LeagueSnapshot:
     standings: list[dict[str, Any]]
     transactions: list[dict[str, Any]]
     draft_date_ms: int | None = None
+    season: int = 0
 
 
 class ESPNClient:
@@ -86,6 +87,7 @@ class ESPNClient:
             standings=standings,
             transactions=transactions,
             draft_date_ms=draft_date_ms,
+            season=self._season,
         )
 
     # --- internal readers, each guarded ---

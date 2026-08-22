@@ -25,7 +25,7 @@ from .generators.notifications import generate_notification
 from .generators.rankings import generate_rankings
 from .generators.reactions import generate_fan_comments, generate_reaction_tweets
 from .generators.tweets import generate_tweet
-from . import gifs, league_history
+from . import gifs, league_history, storylines
 from .generators.graphics import (
     breaking_post,
     final_score_post,
@@ -77,6 +77,8 @@ class Pipeline:
         Insider tip reporting runs on its OWN schedule, not here — see
         check_pending_tips() and run_scheduled_fabrication().
         """
+        self._maybe_announce_new_season()
+
         try:
             snap = self.espn.fetch_snapshot()
         except ESPNAuthError as exc:
@@ -179,9 +181,12 @@ class Pipeline:
         kind gets its own treatment, which is what makes the cadence feel
         varied instead of repetitive."""
         cfg = self.cfg
-        lore = memory_snippet(_team_names_for_event(event))
+        teams = _team_names_for_event(event)
+        lore = memory_snippet(teams)
         if lore:
             event.data["lore"] = lore
+        if teams:
+            storylines.touch_by_teams(cfg.state_db, teams)
         kind = event.kind
 
         if kind == "game_of_the_week":
@@ -290,11 +295,11 @@ class Pipeline:
     def _maybe_send_rankings(self, snap) -> None:
         if not snap.standings:
             return
-        week_key = f"rankings:w{snap.week}"
+        week_key = f"{snap.season}:rankings:w{snap.week}"
         if not self.state.is_new(week_key):
             return
 
-        prev = _load_prev_standings()
+        prev = _load_prev_standings(snap.season)
         rows = build_ranking_movement(snap.standings, prev)
         try:
             result = generate_rankings(
@@ -306,7 +311,7 @@ class Pipeline:
                 event_key=week_key, metadata={"week": snap.week, "rankings": rows},
             )
             self.state.mark_fired(week_key)
-            _save_prev_standings(snap.standings)
+            _save_prev_standings(snap.season, snap.standings)
         except (DeliveryError, SupabaseError) as exc:
             log.error("Failed to publish rankings: %s", exc)
 
@@ -341,8 +346,9 @@ class Pipeline:
     def _publish_tip_report(self, tip: dict) -> None:
         report = generate_insider_report(
             self.claude, tip["raw_text"], self.cfg.tone_default,
-            context=league_history.league_brief(),
+            context=self._insider_context(),
         )
+        storylines.apply_update(self.cfg.state_db, report.get("storyline"))
 
         tip_key = f"insider:tip:{tip['id']}"
         # headline is the notification + card's bold line; body is the fuller
@@ -364,6 +370,12 @@ class Pipeline:
         self._publish_breaking(report["headline"], tip_key)
         self.state.set_meta("insider:last_real_report_at", _utcnow_iso())
         self._publish_reaction_tweets(report["body"], post_id, tip_key)
+
+    def _insider_context(self) -> str:
+        """League history + any ongoing manufactured storylines, combined
+        into one background block for the Insider generators."""
+        parts = [league_history.league_brief(), storylines.active_context(self.cfg.state_db)]
+        return "\n\n".join(p for p in parts if p)
 
     def _article_metadata(self, context: str) -> dict:
         """A short (headline + one paragraph) companion piece giving color on
@@ -417,8 +429,9 @@ class Pipeline:
             return
 
         report = generate_fabricated_rumor(
-            self.claude, self.cfg.tone_default, context=league_history.league_brief(),
+            self.claude, self.cfg.tone_default, context=self._insider_context(),
         )
+        storylines.apply_update(self.cfg.state_db, report.get("storyline"))
         metadata = {"source": "fabricated", "article": {"headline": "", "body": report["body"]}}
         post_id = self._publish(
             "insider_report", report["headline"], "@DiannaRussinni", "🕵️",
@@ -427,6 +440,43 @@ class Pipeline:
         if post_id is not None:
             self._publish_breaking(report["headline"], slot_key)
             self._publish_reaction_tweets(report["body"], post_id, slot_key)
+
+    def decay_storylines(self) -> None:
+        """Daily cooldown for ongoing storylines (see scheduler). Keeps old
+        beefs from lingering forever once nothing keeps them warm."""
+        storylines.decay(self.cfg.state_db)
+
+    # ---------------------------------------------------------- season roll
+    def _maybe_announce_new_season(self) -> None:
+        """Detect a season rollover (cfg.season differs from the last one we
+        recorded) and drop a one-time kickoff post — the zero-touch
+        alternative to a manager remembering to trigger something each fall.
+        A first-ever run just records the baseline silently."""
+        meta_key = "season:current"
+        last = self.state.get_meta(meta_key)
+        current = str(self.cfg.season)
+        if last != current:
+            if last is not None:
+                try:
+                    self._publish_season_kickoff(int(last), self.cfg.season)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("Season kickoff post failed: %s", exc)
+            self.state.set_meta(meta_key, current)
+
+    def _publish_season_kickoff(self, previous_season: int, new_season: int) -> None:
+        prompt = (
+            f"The league just rolled over from the {previous_season} season to a "
+            f"brand new {new_season} season. Write ONE punchy hype headline (max "
+            "12 words, one emoji) announcing the new season has officially begun "
+            "— like an ESPN season-opener tease."
+        )
+        headline = self.claude.generate(
+            "You are ESPN's fantasy football desk announcing a new season kicking off.",
+            prompt, self.cfg.tone_rankings,
+        ).strip()
+        if not headline:
+            return
+        self._publish_breaking(headline, f"season:{new_season}:kickoff")
 
     def _notify_auth_problem(self, detail: str) -> None:
         msg = (
@@ -452,18 +502,27 @@ def _team_names_for_event(event) -> list[str]:
     return []
 
 
-def _load_prev_standings():
+def _load_prev_standings(season: int):
+    """Previous week's standings, for ranking-movement arrows — but only if
+    they're from the SAME season. A season rollover means Week 1 starts with
+    no movement history, not misleading arrows carried over from last year's
+    final standings."""
     try:
         with open(PREV_STANDINGS_FILE) as fh:
-            return json.load(fh)
+            data = json.load(fh)
     except (FileNotFoundError, json.JSONDecodeError):
         return None
+    if isinstance(data, list):
+        return data  # legacy format written before standings were season-scoped
+    if data.get("season") != season:
+        return None
+    return data.get("standings")
 
 
-def _save_prev_standings(standings) -> None:
+def _save_prev_standings(season: int, standings) -> None:
     os.makedirs(os.path.dirname(PREV_STANDINGS_FILE), exist_ok=True)
     with open(PREV_STANDINGS_FILE, "w") as fh:
-        json.dump(standings, fh)
+        json.dump({"season": season, "standings": standings}, fh)
 
 
 def _utcnow_iso() -> str:

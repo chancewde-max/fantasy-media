@@ -20,14 +20,32 @@ Each report comes back as two parts:
 from __future__ import annotations
 
 _FORMAT_RULES = (
-    "Report it in TWO parts:\n"
+    "Report it in these parts:\n"
     "- headline: a short, punchy, attention-grabbing scoop — max 10 words, "
     "one emoji max. This is what flashes as a phone push notification and "
     "as the card's bold top line, so make it land.\n"
     "- body: the full story, 3-5 sentences that expand on the headline with "
     "the scoop, the color, what the league is saying, and what's next. Add "
     "real detail — do NOT just restate the headline.\n"
-    'Respond as JSON: {"headline": "...", "body": "..."}'
+    "- storyline_action: one of \"continue\" (this report escalates or pays "
+    "off one of the ONGOING LEAGUE STORYLINES listed in the context, if any "
+    "were given and one genuinely fits), \"new\" (this report is juicy or "
+    "recurring enough to be worth tracking as its own arc going forward — a "
+    "real beef, a pattern, a running bit), or \"none\" (a one-off, nothing "
+    "worth tracking). Default to \"none\" — most reports are just one drop, "
+    "don't force a storyline where there isn't one.\n"
+    "- storyline_key: REQUIRED and must exactly match one of the [key: ...] "
+    "values from the context when storyline_action is \"continue\". Omit "
+    "otherwise.\n"
+    "- storyline_title: REQUIRED (a short 3-6 word name for the arc, e.g. "
+    "'The Josh Benching Scandal') when storyline_action is \"new\". Omit "
+    "otherwise.\n"
+    "- canon_note: REQUIRED when storyline_action is \"new\" or \"continue\" "
+    "— ONE factual sentence capturing what just happened in-story, written "
+    "so a future report can reference it as established history. Omit when "
+    "storyline_action is \"none\".\n"
+    'Respond as JSON: {"headline": "...", "body": "...", "storyline_action": '
+    '"...", "storyline_key": "...", "storyline_title": "...", "canon_note": "..."}'
 )
 
 REPORT_SYSTEM = (
@@ -80,19 +98,22 @@ _DEFAULT_REPORT = {
         "sources went quiet on this one. Stay tuned — when it breaks, you'll "
         "hear it here first."
     ),
+    "storyline": {"action": "none"},
 }
 
 
 def _with_context(prompt: str, context: str) -> str:
     """Prepend real league context so the report fits the actual league —
-    the managers, their records, and their tendencies — instead of generic
-    filler. The context is background to draw on, not something to recite."""
+    the managers, their records, their tendencies, and any ongoing manufactured
+    storylines — instead of generic filler. The context is background to draw
+    on, not something to recite."""
     if not context:
         return prompt
     return (
-        "Real league context (managers, records, tendencies — use it to keep "
-        "the report grounded and believable; weave in only what's relevant, "
-        "never dump it verbatim, and never contradict it):\n"
+        "Real league context (managers, records, tendencies, ongoing "
+        "storylines — use it to keep the report grounded and believable; "
+        "weave in only what's relevant, never dump it verbatim, and never "
+        "contradict it):\n"
         f"{context}\n\n{prompt}"
     )
 
@@ -142,7 +163,8 @@ def generate_fabricated_rumor(claude, tone: str, context: str = "") -> dict:
 
 
 def _extract_report(data) -> dict | None:
-    """Pull a clean ``{"headline", "body"}`` out of Claude's JSON, or None.
+    """Pull a clean ``{"headline", "body", "storyline"}`` out of Claude's
+    JSON, or None.
 
     Requires a usable body; if the model returns a body but no headline, we
     synthesize a short one from the body so the card/notification still has a
@@ -159,7 +181,29 @@ def _extract_report(data) -> dict | None:
     combined = f"{headline}\n{body}".lower()
     if any(marker in combined for marker in _REFUSAL_MARKERS):
         return None
-    return {"headline": headline, "body": body}
+    return {"headline": headline, "body": body, "storyline": _extract_storyline(data)}
+
+
+def _extract_storyline(data: dict) -> dict:
+    """Pull the optional storyline_action/key/title/canon_note fields into
+    the {"action", "key", "title", "canon_note"} shape storylines.apply_update
+    expects. Malformed or missing fields fall back to "none" — a storyline is
+    never persisted on shaky data."""
+    action = str(data.get("storyline_action") or "none").strip().lower()
+    if action not in {"new", "continue"}:
+        return {"action": "none"}
+    canon_note = str(data.get("canon_note") or "").strip()
+    if not canon_note:
+        return {"action": "none"}
+    if action == "new":
+        title = str(data.get("storyline_title") or "").strip()
+        if not title:
+            return {"action": "none"}
+        return {"action": "new", "title": title, "canon_note": canon_note}
+    key = str(data.get("storyline_key") or "").strip()
+    if not key:
+        return {"action": "none"}
+    return {"action": "continue", "key": key, "canon_note": canon_note}
 
 
 def _headline_from_body(body: str, max_words: int = 10) -> str:

@@ -8,7 +8,7 @@ from src.espn_client import LeagueSnapshot
 from src.events import build_ranking_movement, detect_events
 
 
-def _snap():
+def _snap(season=2026):
     return LeagueSnapshot(
         week=3,
         matchups=[
@@ -20,6 +20,7 @@ def _snap():
             {"rank": 2, "team": "C", "wins": 2, "losses": 1, "points_for": 350.0},
         ],
         transactions=[{"id": "x1", "date": 1, "summary": "A added Player"}],
+        season=season,
     )
 
 
@@ -55,6 +56,20 @@ def test_dedup_keys_are_stable():
     a = detect_events(_snap())
     b = detect_events(_snap())
     assert [e.key for e in a] == [e.key for e in b]
+
+
+def test_dedup_keys_are_scoped_by_season():
+    """The same week's events in a new season must NOT collide with last
+    season's already-fired de-dup keys, or a season rollover would silently
+    skip Week 1 forever. (Transactions are excluded: ESPN's own txn ids are
+    already globally unique, so they don't need season scoping.)"""
+    this_year = [e for e in detect_events(_snap(season=2026)) if e.kind != "transaction"]
+    next_year = [e for e in detect_events(_snap(season=2027)) if e.kind != "transaction"]
+    this_keys = {e.key for e in this_year}
+    next_keys = {e.key for e in next_year}
+    assert this_keys.isdisjoint(next_keys)
+    assert all("2026" in k for k in this_keys)
+    assert all("2027" in k for k in next_keys)
 
 
 def test_ranking_movement_arrows():
