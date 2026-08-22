@@ -9,6 +9,7 @@
 *.db
 data/*
 !data/league_history.json
+!data/cutouts/
 state.db
 
 # Python

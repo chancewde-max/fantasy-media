@@ -355,6 +355,47 @@ def team_logo_url(team_name: str) -> str | None:
     return (team_meta().get((team_name or "").strip().lower()) or {}).get("logo_url")
 
 
+@lru_cache(maxsize=1)
+def players_index() -> dict[str, dict]:
+    """{full_name_lower: {name, espn_id, position}} across all seasons."""
+    idx: dict[str, dict] = {}
+    for season in _seasons().values():
+        for pid, pl in (season.get("players") or {}).items():
+            name = pl.get("full_name")
+            espn_id = pl.get("espn_id")
+            if name and espn_id:
+                idx[name.strip().lower()] = {
+                    "name": name, "espn_id": espn_id, "position": pl.get("position", ""),
+                }
+    return idx
+
+
+def marquee_player(team_name: str, year: int | None = None) -> dict | None:
+    """A notable rostered player for a team that season (name, espn_id,
+    position), to use as a graphic's hero image. None if the roster isn't
+    populated yet (e.g. a preseason export before the draft)."""
+    year = year or current_year()
+    season = _seasons().get(str(year), {})
+    players = season.get("players") or {}
+    key = (team_name or "").strip().lower()
+    for r in season.get("rosters", []):
+        if _clean_name(r.get("metadata", {}).get("team_name", "")).strip().lower() != key:
+            continue
+        ids = (r.get("starters") or []) + (r.get("players") or [])
+        # prefer skill positions for a recognizable face
+        best = None
+        for pid in ids:
+            pl = players.get(pid)
+            if not pl or not pl.get("espn_id"):
+                continue
+            pos = pl.get("position", "")
+            rank = {"QB": 0, "RB": 1, "WR": 2, "TE": 3}.get(pos, 9)
+            if best is None or rank < best[0]:
+                best = (rank, {"name": pl.get("full_name"), "espn_id": pl.get("espn_id"), "position": pos})
+        return best[1] if best else None
+    return None
+
+
 def _owner_for_team(team_name: str, year: int) -> str | None:
     key = (team_name or "").strip().lower()
     for fn, teams in owner_teams().items():

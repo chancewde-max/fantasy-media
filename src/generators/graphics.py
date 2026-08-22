@@ -12,7 +12,7 @@ import os
 
 from .. import gifs, league_history
 from ..events import Event
-from ..graphics import html_render, logos, render, templates
+from ..graphics import html_render, logos, players, render, templates
 from .claude_client import ClaudeClient
 
 _CAPTION_SYSTEM = (
@@ -41,6 +41,16 @@ def _logo(team: str):
         return None
 
 
+def _hero(team: str):
+    """(hero_image_data_uri, player_name) — manual cutout or real player
+    headshot; ('', '') on any failure so graphics fall back to the crest."""
+    try:
+        img, name = players.hero_for_team(team)
+        return img, name
+    except Exception:  # noqa: BLE001
+        return None, ""
+
+
 def _render(html: str, name: str, out_dir: str) -> str | None:
     return html_render.render_html(html, os.path.join(out_dir, f"{name}.png"))
 
@@ -50,9 +60,11 @@ def gameday_post(claude: ClaudeClient, event: Event, tone: str, out_dir: str) ->
     d = event.data
     a, b = d.get("team_a", ""), d.get("team_b", "")
     lore = d.get("lore", "")
+    hero_a, _ = _hero(a)
+    hero_b, _ = _hero(b)
     html = templates.matchup_html(
         a, b, league_history.team_tagline(a), league_history.team_tagline(b),
-        _week_label(d), lore, logo_a=_logo(a), logo_b=_logo(b),
+        _week_label(d), lore, logo_a=_logo(a), logo_b=_logo(b), hero_a=hero_a, hero_b=hero_b,
     )
     image_path = _render(html, f"gameday_{event.key}", out_dir)
     if image_path is None:  # Pillow fallback
@@ -117,9 +129,10 @@ def stat_leader_post(claude: ClaudeClient, event: Event, tone: str, out_dir: str
     kicker = "TEAM OF THE WEEK" if is_high else "LOW OF THE WEEK"
     label = "POINTS" if is_high else "POINTS · YIKES"
     value = f"{score:g}" if isinstance(score, (int, float)) else str(score)
+    hero, player_name = _hero(team)
     html = templates.stat_leader_html(
         kicker, team, value, label, league_history.team_tagline(team),
-        ghost="1" if is_high else "L", logo=_logo(team),
+        ghost="1" if is_high else "L", logo=_logo(team), hero=hero, player_name=player_name,
     )
     image_path = _render(html, f"stat_{event.key}", out_dir)
     if image_path is None:
@@ -135,7 +148,8 @@ def stat_leader_post(claude: ClaudeClient, event: Event, tone: str, out_dir: str
 
 
 def record_post(out_dir: str, key: str, kicker: str, big_line: str, sub: str, team: str, ghost: str = "") -> dict:
-    html = templates.record_html(kicker, big_line, sub, team, ghost=ghost, logo=_logo(team))
+    hero, _ = _hero(team)
+    html = templates.record_html(kicker, big_line, sub, team, ghost=ghost, logo=_logo(team), hero=hero)
     image_path = _render(html, f"record_{key}", out_dir)
     if image_path is None:
         image_path = render.render_record_card(out_dir, f"record_{key}", kicker, big_line, sub)

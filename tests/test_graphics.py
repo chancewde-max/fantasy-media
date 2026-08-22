@@ -19,6 +19,7 @@ def _force_pillow_fallback(monkeypatch):
     exercising the Pillow fallback path (which still returns a valid PNG)."""
     monkeypatch.setattr(graphics.html_render, "render_html", lambda *a, **k: None)
     monkeypatch.setattr(graphics, "_logo", lambda team: None)
+    monkeypatch.setattr(graphics, "_hero", lambda team: (None, ""))
 
 
 class FakeClaude:
