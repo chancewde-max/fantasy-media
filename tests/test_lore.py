@@ -18,7 +18,10 @@ from src.lore import (
 
 def test_owner_resolves_from_current_season_team_name():
     assert _owner_for("JABAWOCKEEZ", 2026) == "jake"
-    assert _owner_for("So good that it Hurts", 2026) == "ethan"
+    # Ethan (2024 Njigbas / 2025 So good that it Hurts) rebranded to
+    # "Back to back" for 2026 after going back-to-back champ — the export
+    # tracks the rename via his stable owner id.
+    assert _owner_for("Back to back", 2026) == "ethan"
 
 
 def test_owner_resolves_2026_rename():
@@ -61,8 +64,10 @@ def test_memory_snippet_empty_when_nothing_notable():
 
 
 def test_memory_snippet_combines_rivalry_and_pattern():
-    snippet = memory_snippet(["So good that it Hurts", "FLACCID WINNERS"])
-    assert snippet  # non-empty: cameron has a flagged late-season pattern
+    # Back to back (ethan) vs FLACCID WINNERS (cameron): a 3-game rivalry, and
+    # cameron carries a flagged late-season fade — so the snippet is non-empty.
+    snippet = memory_snippet(["Back to back", "FLACCID WINNERS"])
+    assert snippet
 
 
 def test_gotw_picks_the_rivalry_matchup_over_a_random_one():

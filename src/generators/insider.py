@@ -83,8 +83,26 @@ _DEFAULT_REPORT = {
 }
 
 
-def generate_insider_report(claude, tip_text: str, tone: str) -> dict:
+def _with_context(prompt: str, context: str) -> str:
+    """Prepend real league context so the report fits the actual league —
+    the managers, their records, and their tendencies — instead of generic
+    filler. The context is background to draw on, not something to recite."""
+    if not context:
+        return prompt
+    return (
+        "Real league context (managers, records, tendencies — use it to keep "
+        "the report grounded and believable; weave in only what's relevant, "
+        "never dump it verbatim, and never contradict it):\n"
+        f"{context}\n\n{prompt}"
+    )
+
+
+def generate_insider_report(claude, tip_text: str, tone: str, context: str = "") -> dict:
     """Rewrite one raw manager tip into a punchy anonymous report.
+
+    ``context`` is optional real league background (see league_history) that
+    keeps the report believable — tied to the actual managers and their
+    history rather than generic drama.
 
     Returns a ``{"headline": str, "body": str}`` pair — a short scoop for the
     notification/headline and a fuller story for the card's "read more". Never
@@ -93,25 +111,30 @@ def generate_insider_report(claude, tip_text: str, tone: str) -> dict:
     drama instead, with a couple of safety-netted fallbacks so something
     usable always comes back.
     """
-    prompt = f'Tip: "{tip_text}". Write the insider report.'
+    prompt = _with_context(f'Tip: "{tip_text}". Write the insider report.', context)
     report = _extract_report(claude.generate_json(REPORT_SYSTEM, prompt, tone, max_tokens=500))
     if report:
         return report
 
     report = _extract_report(
-        claude.generate_json(FALLBACK_SYSTEM, "Write the report.", tone, max_tokens=500)
+        claude.generate_json(
+            FALLBACK_SYSTEM, _with_context("Write the report.", context), tone, max_tokens=500
+        )
     )
     return report or dict(_DEFAULT_REPORT)
 
 
-def generate_fabricated_rumor(claude, tone: str) -> dict:
+def generate_fabricated_rumor(claude, tone: str, context: str = "") -> dict:
     """Invent a rumor from nothing, for the scheduled 'nothing to report' slot.
 
-    Same ``{"headline", "body"}`` shape as ``generate_insider_report``.
+    ``context`` is optional real league background so the invented rumor fits
+    actual managers and their tendencies. Same ``{"headline", "body"}`` shape
+    as ``generate_insider_report``.
     """
     report = _extract_report(
         claude.generate_json(
-            FABRICATE_SYSTEM, "No tips today. Invent one and write the report.",
+            FABRICATE_SYSTEM,
+            _with_context("No tips today. Invent one and write the report.", context),
             tone, max_tokens=500,
         )
     )

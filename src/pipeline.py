@@ -26,6 +26,7 @@ from .generators.notifications import generate_notification
 from .generators.rankings import generate_rankings
 from .generators.reactions import generate_fan_comments, generate_reaction_tweets
 from .generators.tweets import generate_tweet
+from . import league_history
 from .lore import memory_snippet
 from .push import notification_for, send_to_subscriptions
 from .state import State
@@ -245,7 +246,10 @@ class Pipeline:
                 log.exception("Unexpected error reporting tip %s: %s", tip.get("id"), exc)
 
     def _publish_tip_report(self, tip: dict) -> None:
-        report = generate_insider_report(self.claude, tip["raw_text"], self.cfg.tone_default)
+        report = generate_insider_report(
+            self.claude, tip["raw_text"], self.cfg.tone_default,
+            context=league_history.league_brief(),
+        )
 
         tip_key = f"insider:tip:{tip['id']}"
         # headline is the notification + card's bold line; body is the fuller
@@ -318,7 +322,9 @@ class Pipeline:
             log.info("A real tip already dropped since %s — skipping fabrication.", checkpoint)
             return
 
-        report = generate_fabricated_rumor(self.claude, self.cfg.tone_default)
+        report = generate_fabricated_rumor(
+            self.claude, self.cfg.tone_default, context=league_history.league_brief(),
+        )
         metadata = {"source": "fabricated", "article": {"headline": "", "body": report["body"]}}
         post_id = self._publish(
             "insider_report", report["headline"], "@DiannaRussinni", "🕵️",
