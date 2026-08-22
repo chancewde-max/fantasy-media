@@ -103,6 +103,9 @@ export default function TweetCard({ post, onChange }) {
             <span className="tw-time">{timeAgo(post.created_at)}</span>
           </div>
           <div className="tw-text">{post.body}</div>
+          {post.metadata?.gif_url && (
+            <img className="tw-gif" src={post.metadata.gif_url} alt="" loading="lazy" />
+          )}
           <div className="tw-actions">
             <button
               className="tw-icon"

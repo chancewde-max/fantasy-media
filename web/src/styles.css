@@ -195,6 +195,7 @@ body {
 .tw-display { font-weight: 800; font-size: 14px; color: #e7e9ea; }
 .tw-handle, .tw-dot, .tw-time { color: #71767b; font-size: 14px; }
 .tw-text { color: #e7e9ea; font-size: 14px; line-height: 1.4; margin-top: 2px; }
+.tw-gif { width: 100%; max-width: 380px; height: auto; border-radius: 16px; margin-top: 10px; border: 1px solid #2f3336; }
 
 .tw-actions { display: flex; justify-content: space-between; max-width: 300px; margin-top: 10px; }
 .tw-icon {

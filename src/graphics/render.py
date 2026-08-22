@@ -380,3 +380,183 @@ def _line_height(font) -> int:
         return ascent + descent
     except Exception:  # noqa: BLE001
         return 40
+
+
+# ===========================================================================
+# Real "sports app" graphics: gameday matchup, final score, record, stat
+# leader, and a meme card. All square-ish, self-contained (no external assets),
+# and built from the same navy-board family so the feed reads as one brand.
+# ===========================================================================
+def _team_color(name: str) -> tuple:
+    """Deterministic team color from the name, so a team looks the same every
+    time it appears (stand-in for real logos)."""
+    h = 0
+    for ch in name or "?":
+        h = (h * 131 + ord(ch)) & 0xFFFFFFFF
+    return ROW_PALETTE[h % len(ROW_PALETTE)]
+
+
+def _initials(name: str) -> str:
+    words = [w for w in "".join(c if c.isalnum() or c.isspace() else " " for c in (name or "")).split() if w]
+    if not words:
+        return "?"
+    if len(words) == 1:
+        return words[0][:2].upper()
+    return (words[0][0] + words[1][0]).upper()
+
+
+def _crest(d: ImageDraw.ImageDraw, cx: float, cy: float, r: float, name: str) -> None:
+    """A simple circular team crest with initials — a lightweight logo."""
+    color = _team_color(name)
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=color, outline=(255, 255, 255), width=4)
+    f = _load_font(int(r))
+    d.text((cx, cy), _initials(name), font=f, fill=(255, 255, 255), anchor="mm")
+
+
+def render_gameday_matchup(
+    out_dir: str, name: str, team_a: str, team_b: str,
+    sub_a: str = "", sub_b: str = "", week_label: str = "", lore: str = "",
+) -> str:
+    """Pre-game 'A vs B' poster with crests, records, and a lore/rivalry line."""
+    _ensure_dir(out_dir)
+    W, H = 1080, 1080
+    img = _vgradient(W, H, BOARD_TOP, BOARD_BOTTOM)
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([6, 6, W - 6, H - 6], radius=28, outline=BOARD_BORDER, width=4)
+
+    d.text((W / 2, 60), "GAME OF THE WEEK", font=_load_font(40), fill=(255, 210, 90), anchor="ma")
+    if week_label:
+        d.text((W / 2, 120), week_label.upper(), font=_load_font(32), fill=(170, 195, 240), anchor="ma")
+
+    def team_row(y, team, sub):
+        _crest(d, 150, y, 84, team)
+        _wrapped_text(d, (270, y - 56), team.upper(), _load_font(48), FG, max_width=W - 320, line_gap=6)
+        if sub:
+            d.text((270, y + 66), sub, font=_load_font(30), fill=MUTED)
+
+    team_row(330, team_a, sub_a)
+
+    # center VS divider
+    d.line([(90, 540), (W / 2 - 80, 540)], fill=(80, 110, 170), width=2)
+    d.line([(W / 2 + 80, 540), (W - 90, 540)], fill=(80, 110, 170), width=2)
+    d.ellipse([W / 2 - 62, 478, W / 2 + 62, 602], fill=ACCENT, outline=(255, 255, 255), width=4)
+    d.text((W / 2, 540), "VS", font=_load_font(52), fill=(255, 255, 255), anchor="mm")
+
+    team_row(750, team_b, sub_b)
+
+    if lore:
+        _wrapped_text_centered(d, W / 2, 1000, lore, _load_font(26), (200, 215, 245), max_width=W - 140)
+
+    path = os.path.join(out_dir, _safe_name(name) + ".png")
+    _save(img, path)
+    return path
+
+
+def render_final_score(
+    out_dir: str, name: str, winner: str, winner_score: float,
+    loser: str, loser_score: float, badge: str = "", note: str = "",
+) -> str:
+    """Post-game scoreboard: FINAL, both teams + scores, winner highlighted."""
+    _ensure_dir(out_dir)
+    W, H = 1080, 1080
+    img = _vgradient(W, H, BOARD_TOP, BOARD_BOTTOM)
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([6, 6, W - 6, H - 6], radius=28, outline=BOARD_BORDER, width=4)
+
+    d.text((W / 2, 70), "FINAL", font=_load_font(44), fill=ACCENT, anchor="ma")
+    if badge:
+        bw = 460
+        d.rounded_rectangle([W / 2 - bw / 2, 140, W / 2 + bw / 2, 196], radius=28, fill=(255, 210, 90))
+        d.text((W / 2, 168), badge.upper(), font=_load_font(30), fill=(20, 20, 20), anchor="mm")
+
+    def team_row(y, team, score, win):
+        _crest(d, 150, y, 78, team)
+        col = FG if win else MUTED
+        _wrapped_text(d, (260, y - 52), team.upper(), _load_font(42), col, max_width=470, line_gap=4)
+        d.text((W - 70, y), f"{score:g}", font=_load_font(74), fill=col, anchor="rm")
+        if win:
+            d.polygon([(W - 46, y - 12), (W - 46, y + 12), (W - 28, y)], fill=ACCENT)
+
+    team_row(340, winner, winner_score, True)
+    d.line([(90, 540), (W - 90, 540)], fill=(80, 110, 170), width=2)
+    team_row(720, loser, loser_score, False)
+
+    if note:
+        _wrapped_text_centered(d, W / 2, 960, note, _load_font(30), (200, 215, 245), max_width=W - 160)
+
+    path = os.path.join(out_dir, _safe_name(name) + ".png")
+    _save(img, path)
+    return path
+
+
+def render_record_card(
+    out_dir: str, name: str, kicker: str, big_line: str, sub: str = "",
+) -> str:
+    """A milestone / record graphic: small kicker, huge headline stat, subtitle."""
+    _ensure_dir(out_dir)
+    W, H = 1080, 1080
+    img = _vgradient(W, H, BOARD_TOP, BOARD_BOTTOM)
+    _radial_glow(img, W / 2, H / 2, 340, (255, 210, 90))
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([6, 6, W - 6, H - 6], radius=28, outline=BOARD_BORDER, width=4)
+
+    d.text((W / 2, 120), kicker.upper(), font=_load_font(40), fill=(255, 210, 90), anchor="ma")
+    _wrapped_text_centered(d, W / 2, H / 2, big_line.upper(), _load_font(92), FG, max_width=W - 160)
+    if sub:
+        _wrapped_text_centered(d, W / 2, H - 170, sub, _load_font(34), (200, 215, 245), max_width=W - 200)
+
+    path = os.path.join(out_dir, _safe_name(name) + ".png")
+    _save(img, path)
+    return path
+
+
+def render_stat_leader(
+    out_dir: str, name: str, kicker: str, team: str,
+    stat_value: str, stat_label: str, sub: str = "",
+) -> str:
+    """Player/team-of-the-week style graphic: a crest, a big stat, a label."""
+    _ensure_dir(out_dir)
+    W, H = 1080, 1080
+    img = _vgradient(W, H, BOARD_TOP, BOARD_BOTTOM)
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle([6, 6, W - 6, H - 6], radius=28, outline=BOARD_BORDER, width=4)
+
+    d.text((W / 2, 90), kicker.upper(), font=_load_font(40), fill=ACCENT, anchor="ma")
+    _crest(d, W / 2, 340, 140, team)
+    _wrapped_text_centered(d, W / 2, 560, team.upper(), _load_font(52), FG, max_width=W - 160)
+    d.text((W / 2, 720), str(stat_value), font=_load_font(150), fill=(255, 210, 90), anchor="ma")
+    d.text((W / 2, 910), stat_label.upper(), font=_load_font(36), fill=(200, 215, 245), anchor="ma")
+    if sub:
+        _wrapped_text_centered(d, W / 2, 985, sub, _load_font(28), MUTED, max_width=W - 200)
+
+    path = os.path.join(out_dir, _safe_name(name) + ".png")
+    _save(img, path)
+    return path
+
+
+def render_meme(out_dir: str, name: str, top_text: str, bottom_text: str = "") -> str:
+    """Impact-font style meme card — bold white text with a heavy outline on a
+    colored panel. Not a stolen template; an original league meme graphic."""
+    _ensure_dir(out_dir)
+    W, H = 1080, 1080
+    base = _team_color(top_text + bottom_text)
+    img = _vgradient(W, H, _shade(base, 0.5), _shade(base, 0.9))
+    d = ImageDraw.Draw(img)
+
+    def impact(text, cy):
+        if not text:
+            return
+        font = _load_font(78)
+        # crude outline: draw text offset in black around white fill
+        for dx in (-3, 0, 3):
+            for dy in (-3, 0, 3):
+                if dx or dy:
+                    _wrapped_text_centered(d, W / 2 + dx, cy + dy, text.upper(), font, (0, 0, 0), max_width=W - 120)
+        _wrapped_text_centered(d, W / 2, cy, text.upper(), font, (255, 255, 255), max_width=W - 120)
+
+    impact(top_text, 150)
+    impact(bottom_text, H - 170)
+
+    path = os.path.join(out_dir, _safe_name(name) + ".png")
+    _save(img, path)
+    return path

@@ -21,12 +21,17 @@ from .events import build_ranking_movement, detect_events
 from .generators.articles import generate_article
 from .generators.claude_client import ClaudeClient
 from .generators.insider import generate_fabricated_rumor, generate_insider_report
-from .generators.instagram import generate_instagram
 from .generators.notifications import generate_notification
 from .generators.rankings import generate_rankings
 from .generators.reactions import generate_fan_comments, generate_reaction_tweets
 from .generators.tweets import generate_tweet
-from . import league_history
+from . import gifs, league_history
+from .generators.graphics import (
+    final_score_post,
+    gameday_post,
+    meme_post,
+    stat_leader_post,
+)
 from .lore import memory_snippet
 from .push import notification_for, send_to_subscriptions
 from .state import State
@@ -167,12 +172,69 @@ class Pipeline:
             log.warning("Fan comment generation failed: %s", exc)
 
     def _handle_event(self, event) -> None:
+        """Route each event to a purpose-built, graphics-led drop so the feed
+        reads like a real media outlet — a gameday poster, a scoreboard, a
+        stat card, a meme — instead of a leak plus three canned tweets. Every
+        kind gets its own treatment, which is what makes the cadence feel
+        varied instead of repetitive."""
         cfg = self.cfg
-
         lore = memory_snippet(_team_names_for_event(event))
         if lore:
             event.data["lore"] = lore
+        kind = event.kind
 
+        if kind == "game_of_the_week":
+            post = gameday_post(self.claude, event, cfg.tone_instagram, OUT_DIR)
+            self._publish(
+                "instagram", post["caption"], "@LeagueGram", "🏈",
+                image_path=post.get("image_path"),
+                event_key=f"{event.key}:gameday", metadata=event.data,
+            )
+            self._publish_tweet(event, "Hype the Game of the Week in one line.", "gotw win")
+            return
+
+        if kind in {"blowout", "nailbiter"}:
+            post = final_score_post(self.claude, event, cfg.tone_instagram, OUT_DIR)
+            self._publish(
+                "instagram", post["caption"], "@LeagueGram", "📊",
+                image_path=post.get("image_path"),
+                event_key=f"{event.key}:score", metadata={**event.data, "gif_url": post.get("gif_url")},
+            )
+            if kind == "blowout":
+                self._publish_meme(event, f"{event.data.get('winner')} blew out "
+                                   f"{event.data.get('loser')} by {event.data.get('margin')}")
+            else:
+                self._publish_tweet(event, "React to the closest game of the week.", "nail biter")
+            return
+
+        if kind in {"high", "low"}:
+            post = stat_leader_post(self.claude, event, cfg.tone_instagram, OUT_DIR)
+            emoji = "🔥" if kind == "high" else "🧊"
+            self._publish(
+                "instagram", post["caption"], "@LeagueGram", emoji,
+                image_path=post.get("image_path"),
+                event_key=f"{event.key}:stat", metadata=event.data,
+            )
+            if kind == "low":
+                self._publish_meme(event, f"{event.data.get('team')} scored only "
+                                   f"{event.data.get('score')} — worst in the league this week")
+            else:
+                self._publish_tweet(event, "Salute the week's top scorer.", "on fire")
+            return
+
+        # matchup_final -> a clean scoreboard graphic (every game logged, no
+        # extra chatter). blowout/nailbiter above already own the marquee ones.
+        if kind == "matchup_final":
+            post = final_score_post(self.claude, event, cfg.tone_instagram, OUT_DIR)
+            self._publish(
+                "instagram", post["caption"], "@LeagueGram", "📋",
+                image_path=post.get("image_path"),
+                event_key=f"{event.key}:score", metadata=event.data,
+            )
+            return
+
+        # Everything else (transactions, draft time, misc) breaks as an ESPN
+        # "leak" with a companion article.
         note = generate_notification(self.claude, event, cfg.tone_notifications)
         metadata = {**event.data, **self._article_metadata(f"{event.title}: {note}")}
         self._publish(
@@ -180,19 +242,33 @@ class Pipeline:
             event_key=f"{event.key}:note", metadata=metadata,
         )
 
-        if event.kind in {"blowout", "nailbiter", "high", "low", "matchup_final", "game_of_the_week"}:
-            tweet = generate_tweet(self.claude, event, cfg.tone_tweets)
-            self._publish(
-                "tweet", tweet, "@DiannaRussinni", "🐦",
-                event_key=f"{event.key}:tweet", metadata=event.data,
-            )
+    def _publish_tweet(self, event, instruction: str, gif_query: str) -> None:
+        """A single reaction tweet, with a Tenor GIF attached when enabled."""
+        try:
+            tweet = generate_tweet(self.claude, event, self.cfg.tone_tweets)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Tweet generation failed: %s", exc)
+            return
+        self._publish(
+            "tweet", tweet, "@DiannaRussinni", "🐦",
+            event_key=f"{event.key}:tweet",
+            metadata={**event.data, "gif_url": gifs.search_gif(gif_query)},
+        )
 
-            ig = generate_instagram(self.claude, event, cfg.tone_instagram, OUT_DIR)
-            self._publish(
-                "instagram", ig["caption"], "@LeagueGram", "📸",
-                image_path=ig.get("image_path"),
-                event_key=f"{event.key}:ig", metadata=event.data,
-            )
+    def _publish_meme(self, event, context: str) -> None:
+        """An original league meme graphic reacting to the event."""
+        try:
+            meme = meme_post(self.claude, context, self.cfg.tone_tweets, OUT_DIR, event.key)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Meme generation failed: %s", exc)
+            return
+        if not meme:
+            return
+        self._publish(
+            "instagram", meme["caption"], "@LeagueGram", "😂",
+            image_path=meme.get("image_path"),
+            event_key=f"{event.key}:meme", metadata=event.data,
+        )
 
     def _maybe_send_rankings(self, snap) -> None:
         if not snap.standings:

@@ -332,6 +332,31 @@ def manager_brief(first_name: str, year: int | None = None) -> str:
     return "; ".join(bits) + "." if bits else ""
 
 
+def _owner_for_team(team_name: str, year: int) -> str | None:
+    key = (team_name or "").strip().lower()
+    for fn, teams in owner_teams().items():
+        if (teams.get(year) or "").strip().lower() == key:
+            return fn
+    return None
+
+
+def team_tagline(team_name: str, year: int | None = None) -> str:
+    """A compact one-liner for a team's crest sub-text on graphics, e.g.
+    'Chance · 2x champ' or 'Ethan · 17-10 career'. Empty if unknown."""
+    year = year or current_year()
+    fn = _owner_for_team(team_name, year)
+    p = manager_profiles().get(fn) if fn else None
+    if not p:
+        return ""
+    who = fn.capitalize()
+    if p["championships"]:
+        n = len(p["championships"])
+        return f"{who} · {n}x champ" if n > 1 else f"{who} · reigning champ"
+    if p["career_wins"] or p["career_losses"]:
+        return f"{who} · {p['career_wins']}-{p['career_losses']} career"
+    return who
+
+
 def league_brief(team_names: list[str] | None = None, year: int | None = None) -> str:
     """Factual context block for the Insider: dossiers on the managers
     involved (or the whole league if none given), so rumors sound like they
