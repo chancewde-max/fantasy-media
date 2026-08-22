@@ -197,6 +197,17 @@ body {
 .tw-text { color: #e7e9ea; font-size: 14px; line-height: 1.4; margin-top: 2px; }
 .tw-gif { width: 100%; max-width: 380px; height: auto; border-radius: 16px; margin-top: 10px; border: 1px solid #2f3336; }
 
+.tw-avatar-pundit {
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 800; font-size: 14px; letter-spacing: .3px;
+  position: relative;
+}
+.tw-avatar-mic {
+  position: absolute; right: -4px; bottom: -4px; font-size: 13px;
+  background: #000; border-radius: 50%; padding: 2px; line-height: 1;
+  border: 1px solid #2f3336;
+}
+
 .tw-actions { display: flex; justify-content: space-between; max-width: 300px; margin-top: 10px; }
 .tw-icon {
   background: none; border: none; color: #71767b; display: flex; align-items: center;

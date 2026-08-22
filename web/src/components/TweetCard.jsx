@@ -65,6 +65,28 @@ function HeartIcon({ liked }) {
   );
 }
 
+// The two recurring pundit accounts get a distinct badge avatar instead of
+// the random stock-photo look every other handle gets — a deliberate choice:
+// no real photo of the real people, just a consistent "recurring segment"
+// look so they read as fixed characters, not one-off fans.
+const PUNDIT_AVATARS = {
+  "@danorlovsky7": { initials: "DO", from: "#1e3a8a", to: "#3b82f6" },
+  "@stephenasmith": { initials: "SA", from: "#7c2d12", to: "#f97316" },
+};
+
+function PunditAvatar({ handle }) {
+  const p = PUNDIT_AVATARS[handle.toLowerCase()];
+  return (
+    <span
+      className="tw-avatar tw-avatar-pundit"
+      style={{ background: `linear-gradient(135deg, ${p.from}, ${p.to})` }}
+    >
+      {p.initials}
+      <span className="tw-avatar-mic" aria-hidden="true">🎙️</span>
+    </span>
+  );
+}
+
 function ShareIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18">
@@ -85,6 +107,7 @@ export default function TweetCard({ post, onChange }) {
   const reactions = post.reactions || [];
   const handle = post.author_handle || "@fan";
   const name = displayName(handle);
+  const isPundit = Boolean(PUNDIT_AVATARS[handle.toLowerCase()]);
 
   async function react() {
     setLiked(true);
@@ -95,7 +118,11 @@ export default function TweetCard({ post, onChange }) {
   return (
     <article className="tw-card">
       <div className="tw-body-row">
-        <img className="tw-avatar" src={avatarUrl(handle, 80)} alt="" />
+        {isPundit ? (
+          <PunditAvatar handle={handle} />
+        ) : (
+          <img className="tw-avatar" src={avatarUrl(handle, 80)} alt="" />
+        )}
         <div className="tw-main">
           <div className="tw-head">
             <span className="tw-display">{name}</span>
