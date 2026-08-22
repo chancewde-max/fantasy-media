@@ -48,7 +48,7 @@ def test_renderers_produce_images(tmp_path):
 
 
 def test_gifs_disabled_without_key(monkeypatch):
-    monkeypatch.delenv("TENOR_API_KEY", raising=False)
+    monkeypatch.delenv("GIPHY_API_KEY", raising=False)
     assert gifs.gifs_enabled() is False
     assert gifs.search_gif("celebration") is None
     assert gifs.search_gif("") is None

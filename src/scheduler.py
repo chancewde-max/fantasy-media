@@ -18,6 +18,8 @@ log = logging.getLogger(__name__)
 def run(cfg: Config) -> None:
     pipeline = Pipeline(cfg)
 
+    _maybe_backfill(pipeline)
+
     # Run immediately on start, then on the interval.
     log.info("Initial poll...")
     _safe_cycle(pipeline)
@@ -67,6 +69,27 @@ def run(cfg: Config) -> None:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):
         log.info("Shutting down scheduler.")
+
+
+def _maybe_backfill(pipeline: Pipeline) -> None:
+    """Run the feed backfill/retrofit once per version (or when FORCE_BACKFILL
+    is set), so the feed is seeded with the current graphics + real data."""
+    import os
+
+    from .historical import BACKFILL_VERSION, run_backfill
+
+    if pipeline.supabase is None:
+        return
+    done_key = f"backfill:{BACKFILL_VERSION}:done"
+    forced = os.environ.get("FORCE_BACKFILL", "").lower() in ("1", "true", "yes")
+    if pipeline.state.get_meta(done_key) and not forced:
+        return
+    try:
+        log.info("Running feed backfill (%s)...", BACKFILL_VERSION)
+        run_backfill(pipeline.claude, pipeline.supabase, tone=pipeline.cfg.tone_default)
+        pipeline.state.set_meta(done_key, "1")
+    except Exception as exc:  # noqa: BLE001 - never let backfill block the poller
+        log.exception("Backfill failed, continuing: %s", exc)
 
 
 def _safe_cycle(pipeline: Pipeline) -> None:

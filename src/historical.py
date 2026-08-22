@@ -1,214 +1,166 @@
-"""Historical season backfill.
+"""Feed backfill / retrofit.
 
-Turns real past-season standings + playoff results into the same kind of
-AI-generated posts the live pipeline produces — ESPN alerts, tweets, and
-Instagram-style recaps with real rendered graphics — backdated to when those
-games actually happened, and published through the same SupabaseWriter (real
-Storage image uploads, not a manual one-off).
+Rebuilds the feed from the authoritative ESPN export (league_history) using the
+current graphics engine — champion cards, playoff-moment breaking graphics,
+final-standings boards, plus current-season storylines (reigning champ,
+rivalry previews). Everything is backdated to when it happened and published
+through the same SupabaseWriter, with stable event_keys so re-running is
+idempotent.
 
-Run via `python backfill_history.py` (see repo root), not imported by the
-normal polling pipeline.
+Bumping BACKFILL_VERSION changes the event_key namespace, so a new retrofit
+publishes fresh posts instead of colliding with an older run.
 """
 from __future__ import annotations
 
+import itertools
 import logging
+import os
 
+from . import league_history, lore
 from .generators.claude_client import ClaudeClient
 from .generators.instagram import SYSTEM as INSTAGRAM_SYSTEM
 from .generators.notifications import SYSTEM as NOTIFICATION_SYSTEM
 from .generators.reactions import generate_fan_comments
-from .generators.tweets import SYSTEM as TWEET_SYSTEM
-from .graphics.render import render_champion_card, render_standings_card
+from .graphics import html_render, logos, players, templates
+from .graphics.render import render_power_rankings
 from .supabase_writer import SupabaseError, SupabaseWriter
 
 log = logging.getLogger(__name__)
 
 OUT_DIR = "out"
+BACKFILL_VERSION = "v2"
 
-SEASONS = [
-    {
-        "year": 2024,
-        "standings": [
-            {"rank": 1, "team": "Njigbas in Paris", "wins": 8, "losses": 5},
-            {"rank": 2, "team": "Need More Beers", "wins": 7, "losses": 5},
-            {"rank": 3, "team": "MEAT ON MEAT", "wins": 5, "losses": 7},
-            {"rank": 4, "team": "The Juice is Loose in Hell", "wins": 6, "losses": 7},
-            {"rank": 5, "team": "Team of Collusion", "wins": 9, "losses": 4},
-            {"rank": 6, "team": "Jabawockeez", "wins": 5, "losses": 7},
-            {"rank": 7, "team": "Tha Hoodie Gang", "wins": 8, "losses": 5},
-            {"rank": 8, "team": "Garren's Great Team", "wins": 8, "losses": 5},
-            {"rank": 9, "team": "B50Beast", "wins": 5, "losses": 8},
-            {"rank": 10, "team": "White Diggs", "wins": 4, "losses": 9},
-            {"rank": 11, "team": "Patrick's Team", "wins": 5, "losses": 8},
-        ],
-        "standings_when": "2025-01-06T12:00:00+00:00",
-        "champion": "Njigbas in Paris",
-        "runner_up": "Need More Beers",
-        "champ_score": "249.28 - 232.56",
-        "champ_when": "2025-01-05T21:00:00+00:00",
-        "games": [
-            {
-                "key": "r1_upset", "when": "2024-12-22T20:05:00+00:00",
-                "facts": "Round 1 of the 2024 playoffs: #8 seed MEAT ON MEAT "
-                         "upset #1 seed Team of Collusion, 148.24 to 102.50.",
-                "notable": "upset",
-            },
-            {
-                "key": "r1_juice", "when": "2024-12-22T21:00:00+00:00",
-                "facts": "Round 1 of the 2024 playoffs: The Juice Is Loose In "
-                         "Hell beat Garren's Great Team 156.48 to 93.70.",
-                "notable": None,
-            },
-            {
-                "key": "r2_nmb", "when": "2024-12-29T20:00:00+00:00",
-                "facts": "Round 2 of the 2024 playoffs: Need More Beers beat "
-                         "MEAT ON MEAT 172.94 to 160.22 to reach the championship.",
-                "notable": None,
-            },
-            {
-                "key": "r2_njiqbas", "when": "2024-12-29T20:30:00+00:00",
-                "facts": "Round 2 of the 2024 playoffs: Njigbas in Paris "
-                         "eliminated The Juice Is Loose In Hell 132.74 to 110.16 "
-                         "to reach the championship.",
-                "notable": None,
-            },
-        ],
-    },
-    {
-        "year": 2025,
-        "standings": [
-            {"rank": 1, "team": "So Good That It Hurts", "wins": 9, "losses": 5},
-            {"rank": 2, "team": "Flaccid Winners", "wins": 9, "losses": 5},
-            {"rank": 3, "team": "Need More Beers", "wins": 9, "losses": 5},
-            {"rank": 4, "team": "The Flee The Scenes", "wins": 9, "losses": 5},
-            {"rank": 5, "team": "Tha Hoodie Gang", "wins": 8, "losses": 6},
-            {"rank": 6, "team": "B50Beast", "wins": 6, "losses": 8},
-            {"rank": 7, "team": "Jabawockeez", "wins": 8, "losses": 6},
-            {"rank": 8, "team": "Patrick's Team", "wins": 5, "losses": 9},
-            {"rank": 9, "team": "Team of Collusion", "wins": 2, "losses": 12},
-            {"rank": 10, "team": "I Chase White Kids", "wins": 5, "losses": 9},
-        ],
-        "standings_when": "2026-01-05T12:00:00+00:00",
-        "champion": "So Good That It Hurts",
-        "runner_up": "Flaccid Winners",
-        "champ_score": "257.42 - 212.70",
-        "champ_when": "2026-01-04T21:00:00+00:00",
-        "games": [
-            {
-                "key": "r1_nailbiter", "when": "2025-12-21T20:00:00+00:00",
-                "facts": "Round 1 of the 2025 playoffs: So Good That It Hurts "
-                         "barely survived B50Beast, 156.90 to 154.86 — decided "
-                         "by about 2 points.",
-                "notable": "nailbiter",
-            },
-            {
-                "key": "r1_flee", "when": "2025-12-21T21:00:00+00:00",
-                "facts": "Round 1 of the 2025 playoffs: The Flee The Scenes beat "
-                         "Jabawockeez 159.70 to 142.88.",
-                "notable": None,
-            },
-            {
-                "key": "r2_upset", "when": "2025-12-28T20:00:00+00:00",
-                "facts": "Round 2 of the 2025 playoffs: Flaccid Winners upset "
-                         "#1 seed Need More Beers 150.30 to 135.80, knocking out "
-                         "the top seed.",
-                "notable": "upset",
-            },
-            {
-                "key": "r2_sgtih", "when": "2025-12-28T20:30:00+00:00",
-                "facts": "Round 2 of the 2025 playoffs: So Good That It Hurts "
-                         "blew past The Flee The Scenes 136.50 to 91.08 to reach "
-                         "the championship.",
-                "notable": None,
-            },
-        ],
-    },
-]
 
-COMMISSIONER_NOTE = {
-    "when": "2026-08-14T23:00:00+00:00",
-    "quote": "Welcome to the 2026 season. Juan's squad is still dawgshit, famo!",
-}
+def _render(html: str, name: str) -> str | None:
+    return html_render.render_html(html, os.path.join(OUT_DIR, f"{name}.png"))
+
+
+def _logo(team: str):
+    try:
+        return logos.logo_data_uri(team)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _hero(team: str):
+    try:
+        return players.hero_for_team(team)[0]
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def run_backfill(claude: ClaudeClient, supabase: SupabaseWriter, tone: str = "roast") -> None:
-    for season in SEASONS:
-        _publish_season(claude, supabase, season, tone)
-    _publish_commissioner_note(claude, supabase)
-    log.info("Historical backfill complete.")
+    for year in league_history.completed_years():
+        _publish_season(claude, supabase, year, tone)
+    _publish_current_storylines(claude, supabase, tone)
+    log.info("Feed backfill complete.")
 
 
-def _publish_season(claude: ClaudeClient, supabase: SupabaseWriter, season: dict, tone: str) -> None:
-    year = season["year"]
+def _publish_season(claude: ClaudeClient, supabase: SupabaseWriter, year: int, tone: str) -> None:
+    summary = league_history.season_summary(year)
+    if not summary:
+        return
+    champ = summary["champion"]
+    jan = f"{year + 1}-01-05T21:00:00+00:00"
 
-    for game in season["games"]:
-        note = claude.generate(
-            NOTIFICATION_SYSTEM, f"{game['facts']} Write the alert.", tone, max_tokens=160,
+    # Champion card
+    facts = f"{champ} won the {year} league championship"
+    if summary["runner_up"]:
+        facts += f", beating {summary['runner_up']} {summary['champ_score']}".rstrip()
+    caption = claude.generate(INSTAGRAM_SYSTEM, f"{facts}. Write the caption.", tone, max_tokens=200)
+    html = templates.record_html(
+        f"{year} CHAMPION", champ, (f"def. {summary['runner_up']} {summary['champ_score']}").strip(),
+        champ, ghost=str(year), logo=_logo(champ), hero=_hero(champ),
+    )
+    img = _render(html, f"hist_{year}_champ")
+    _publish(claude, supabase, "instagram", caption, "@LeagueGram",
+             event_key=f"hist:{BACKFILL_VERSION}:{year}:champ", when=jan, tone=tone, image_path=img)
+
+    # Playoff moments -> breaking graphics
+    for i, fact in enumerate(league_history.playoff_facts().get(year, [])):
+        team = league_history.detect_team(fact) or champ
+        cap = claude.generate(NOTIFICATION_SYSTEM, f"{fact} Write the alert.", tone, max_tokens=160)
+        bhtml = templates.breaking_html(
+            _short(fact), team=team, logo=_logo(team), hero=_hero(team),
         )
-        _publish(
-            claude, supabase, "espn_notification", note, "ESPN",
-            event_key=f"hist:{year}:{game['key']}:note", when=game["when"], tone=tone,
+        bimg = _render(bhtml, f"hist_{year}_po{i}")
+        _publish(claude, supabase, "instagram", cap, "@LeagueGram",
+                 event_key=f"hist:{BACKFILL_VERSION}:{year}:po{i}",
+                 when=f"{year}-12-22T20:0{i}:00+00:00", tone=tone, image_path=bimg,
+                 with_fan_comments=False)
+
+    # Final standings board
+    rows = summary["standings"]
+    if rows:
+        sfacts = f"{year} final standings: " + ", ".join(
+            f"{r['rank']}. {r['team']} ({r['wins']}-{r['losses']})" for r in rows)
+        scap = claude.generate(INSTAGRAM_SYSTEM, f"{sfacts} Write the caption.", tone, max_tokens=200)
+        simg = render_power_rankings(OUT_DIR, f"hist_{year}_standings",
+                                     title="FINAL STANDINGS", subtitle=f"{year} SEASON",
+                                     rows=rows, show_arrows=False)
+        _publish(claude, supabase, "instagram", scap, "@LeagueGram",
+                 event_key=f"hist:{BACKFILL_VERSION}:{year}:standings",
+                 when=f"{year + 1}-01-06T12:00:00+00:00", tone=tone, image_path=simg)
+
+
+def _publish_current_storylines(claude: ClaudeClient, supabase: SupabaseWriter, tone: str) -> None:
+    year = league_history.current_year()
+
+    # Reigning champ record card
+    years = league_history.completed_years()
+    if years:
+        last = years[-1]
+        champ_last = league_history.season_summary(last)["champion"]
+        # follow to their current-year team name
+        fn = lore._owner_for(champ_last, last)
+        cur_team = league_history.owner_teams().get(fn, {}).get(year, champ_last) if fn else champ_last
+        chips = league_history.manager_profiles().get(fn, {}).get("championships", []) if fn else []
+        big = f"{len(chips)}x Champ" if len(chips) > 1 else "Reigning Champ"
+        cap = claude.generate(INSTAGRAM_SYSTEM,
+                              f"{cur_team} enters {year} as the reigning champ. Write hype.", tone, max_tokens=180)
+        html = templates.record_html(f"{year} SEASON", big, f"{cur_team} runs it back",
+                                     cur_team, ghost=(f"{len(chips)}x" if len(chips) > 1 else str(last)),
+                                     logo=_logo(cur_team), hero=_hero(cur_team))
+        img = _render(html, f"hist_{year}_reigning")
+        _publish(claude, supabase, "instagram", cap, "@LeagueGram",
+                 event_key=f"hist:{BACKFILL_VERSION}:{year}:reigning",
+                 when=f"{year}-08-20T18:00:00+00:00", tone=tone, image_path=img)
+
+    # Top rivalry previews
+    for i, (a_team, b_team, note) in enumerate(_top_rivalries(year, n=2)):
+        cap = claude.generate(INSTAGRAM_SYSTEM,
+                              f"Preseason rivalry: {a_team} vs {b_team}. {note} Write hype.", tone, max_tokens=180)
+        html = templates.matchup_html(
+            a_team, b_team, league_history.team_tagline(a_team), league_history.team_tagline(b_team),
+            f"{year} RIVALRY", note, logo_a=_logo(a_team), logo_b=_logo(b_team),
+            hero_a=_hero(a_team), hero_b=_hero(b_team),
         )
-        if game["notable"]:
-            tweet = claude.generate(
-                TWEET_SYSTEM, f"{game['facts']} Write the tweet.", tone, max_tokens=180,
-            )
-            _publish(
-                claude, supabase, "tweet", tweet, "@degen_danny",
-                event_key=f"hist:{year}:{game['key']}:tweet", when=game["when"], tone=tone,
-                with_fan_comments=False,
-            )
-
-    champ_facts = (
-        f"{season['champion']} won the {year} league championship, beating "
-        f"{season['runner_up']} {season['champ_score']} in the title game."
-    )
-    champ_alert = claude.generate(
-        NOTIFICATION_SYSTEM, f"{champ_facts} Write the alert.", tone, max_tokens=160,
-    )
-    _publish(
-        claude, supabase, "espn_notification", champ_alert, "ESPN",
-        event_key=f"hist:{year}:champ:alert", when=season["champ_when"], tone=tone,
-    )
-
-    champ_caption = claude.generate(
-        INSTAGRAM_SYSTEM, f"{champ_facts} Write the caption.", tone, max_tokens=200,
-    )
-    champ_image = render_champion_card(
-        OUT_DIR, f"hist_champ_{year}", f"{year} SEASON", season["champion"], season["champ_score"],
-    )
-    _publish(
-        claude, supabase, "instagram", champ_caption, "@LeagueGram",
-        event_key=f"hist:{year}:champ:ig", when=season["champ_when"], tone=tone, image_path=champ_image,
-    )
-
-    standings_lines = ", ".join(
-        f"{r['rank']}. {r['team']} ({r['wins']}-{r['losses']})" for r in season["standings"]
-    )
-    standings_facts = f"{year} final standings, in order: {standings_lines}."
-    standings_caption = claude.generate(
-        INSTAGRAM_SYSTEM, f"{standings_facts} Write the caption.", tone, max_tokens=200,
-    )
-    standings_image = render_standings_card(
-        OUT_DIR, f"hist_standings_{year}", f"{year} SEASON", season["standings"],
-    )
-    _publish(
-        claude, supabase, "instagram", standings_caption, "@LeagueGram",
-        event_key=f"hist:{year}:standings:ig", when=season["standings_when"], tone=tone,
-        image_path=standings_image,
-    )
+        img = _render(html, f"hist_{year}_rivalry{i}")
+        _publish(claude, supabase, "instagram", cap, "@LeagueGram",
+                 event_key=f"hist:{BACKFILL_VERSION}:{year}:rivalry{i}",
+                 when=f"{year}-08-21T18:0{i}:00+00:00", tone=tone, image_path=img)
 
 
-def _publish_commissioner_note(claude: ClaudeClient, supabase: SupabaseWriter) -> None:
-    body = (
-        f"\U0001F4CC Commissioner's note for the 2026 season: "
-        f"\"{COMMISSIONER_NOTE['quote']}\" Some things never change."
-    )
-    _publish(
-        claude, supabase, "espn_notification", body, "Commissioner",
-        event_key="hist:2026:commish_note", when=COMMISSIONER_NOTE["when"], tone="roast",
-        with_fan_comments=False,
-    )
+def _top_rivalries(year: int, n: int = 2) -> list[tuple[str, str, str]]:
+    """Pick the juiciest current-team rivalries by games played, as
+    (team_a, team_b, note)."""
+    owners = [o for o in league_history.owner_teams() if league_history.owner_teams()[o].get(year)]
+    scored = []
+    for a, b in itertools.combinations(owners, 2):
+        h2h = lore.head_to_head(a, b)
+        if len(h2h["games"]) >= 3:
+            note = lore.rivalry_note(a, b) or ""
+            ta = league_history.owner_teams()[a][year]
+            tb = league_history.owner_teams()[b][year]
+            scored.append((len(h2h["games"]), abs(h2h["wins"] - h2h["losses"]), ta, tb, note))
+    # most games, then closest series
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    return [(ta, tb, note) for _, _, ta, tb, note in scored[:n]]
+
+
+def _short(text: str, words: int = 9) -> str:
+    parts = text.replace("In the", "").split()
+    return " ".join(parts[:words]).rstrip(",.") if len(parts) > words else text.rstrip(".")
 
 
 def _publish(
@@ -224,15 +176,12 @@ def _publish(
     except SupabaseError as exc:
         log.error("Failed to publish %s: %s", event_key, exc)
         return
-
     if post_id is None:
         log.info("Skipping %s (already published).", event_key)
         return
-
     if with_fan_comments:
         try:
-            comments = generate_fan_comments(claude, body, tone, n=2)
-            for c in comments:
+            for c in generate_fan_comments(claude, body, tone, n=2):
                 supabase.insert_fan_comment(post_id, c["handle"], c["text"], created_at=when)
         except Exception as exc:  # noqa: BLE001
             log.warning("Fan comments failed for %s: %s", event_key, exc)

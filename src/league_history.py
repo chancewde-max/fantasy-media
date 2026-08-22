@@ -196,6 +196,52 @@ def _ordinal(n: int) -> str:
     return f"{n}{suf}"
 
 
+def standings(year: int) -> list[dict]:
+    """Final standings rows for a season: [{rank, team, wins, losses, points}]."""
+    season = _seasons().get(str(year), {})
+    rows = []
+    for r in _roster_index(season).values():
+        if r["final_rank"]:
+            rows.append({
+                "rank": r["final_rank"], "team": r["team"],
+                "wins": r["wins"], "losses": r["losses"], "points": round(r["points"], 1),
+            })
+    rows.sort(key=lambda x: x["rank"])
+    return rows
+
+
+def season_summary(year: int) -> dict | None:
+    """{year, champion, runner_up, champ_score, standings} for a completed
+    season, or None if it isn't decided (e.g. the in-progress season)."""
+    season = _seasons().get(str(year), {})
+    ridx = _roster_index(season)
+    champ = next((r for r in ridx.values() if r["final_rank"] == 1), None)
+    runner = next((r for r in ridx.values() if r["final_rank"] == 2), None)
+    if not champ:
+        return None
+    score = ""
+    facts = playoff_facts().get(year, [])
+    for f in facts:
+        if "championship" in f.lower() and "-" in f:
+            # pull the trailing "X-Y" score if present
+            tail = f.rsplit(",", 1)[-1].strip().rstrip(".")
+            if "-" in tail:
+                score = tail
+            break
+    return {
+        "year": year,
+        "champion": champ["team"],
+        "runner_up": runner["team"] if runner else "",
+        "champ_score": score,
+        "standings": standings(year),
+    }
+
+
+def completed_years() -> list[int]:
+    """Seasons that have a decided champion, oldest first."""
+    return sorted(y for y in (int(x) for x in _seasons()) if season_summary(y))
+
+
 @lru_cache(maxsize=1)
 def playoff_facts() -> dict[int, list[str]]:
     """Short factual playoff lines per season, derived from final ranks and
@@ -382,11 +428,7 @@ def players_index() -> dict[str, dict]:
     return idx
 
 
-def marquee_player(team_name: str, year: int | None = None) -> dict | None:
-    """A notable rostered player for a team that season (name, espn_id,
-    position), to use as a graphic's hero image. None if the roster isn't
-    populated yet (e.g. a preseason export before the draft)."""
-    year = year or current_year()
+def _marquee_in_season(team_name: str, year: int) -> dict | None:
     season = _seasons().get(str(year), {})
     players = season.get("players") or {}
     key = (team_name or "").strip().lower()
@@ -394,8 +436,7 @@ def marquee_player(team_name: str, year: int | None = None) -> dict | None:
         if _clean_name(r.get("metadata", {}).get("team_name", "")).strip().lower() != key:
             continue
         ids = (r.get("starters") or []) + (r.get("players") or [])
-        # prefer skill positions for a recognizable face
-        best = None
+        best = None  # prefer skill positions for a recognizable face
         for pid in ids:
             pl = players.get(pid)
             if not pl or not pl.get("espn_id"):
@@ -405,6 +446,31 @@ def marquee_player(team_name: str, year: int | None = None) -> dict | None:
             if best is None or rank < best[0]:
                 best = (rank, {"name": pl.get("full_name"), "espn_id": pl.get("espn_id"), "position": pos})
         return best[1] if best else None
+    return None
+
+
+def marquee_player(team_name: str, year: int | None = None) -> dict | None:
+    """A notable rostered player for a team, for a graphic's hero image.
+
+    Prefers the current season; if its roster isn't populated yet (e.g. a
+    preseason export before the draft), it walks back to the most recent season
+    that has a roster for this owner's team — following the owner across
+    renames — so a face still shows. Once the current season's roster fills in,
+    it's used automatically. Returns None only if no season has a roster.
+    """
+    year = year or current_year()
+    # follow this team's owner back through their prior team names
+    fn = _owner_for_team(team_name, year)
+    names_by_year = owner_teams().get(fn, {}) if fn else {}
+    for y in sorted((int(y) for y in _seasons()), reverse=True):
+        if y > year:
+            continue
+        name_that_year = names_by_year.get(y, team_name if y == year else None)
+        if not name_that_year:
+            continue
+        found = _marquee_in_season(name_that_year, y)
+        if found:
+            return found
     return None
 
 
