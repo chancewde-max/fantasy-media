@@ -1,8 +1,10 @@
 """Power-ranking graphic with up/down movement arrows + a Claude blurb."""
 from __future__ import annotations
 
+import os
 from typing import Any
 
+from ..graphics import html_render, logos, templates
 from ..graphics.render import render_rankings_card
 from ..lore import memory_snippet
 from .claude_client import ClaudeClient
@@ -42,7 +44,21 @@ def generate_rankings(
         tone,
         max_tokens=120,
     )
-    image_path = render_rankings_card(
-        out_dir=out_dir, name=f"rankings_w{week}", week=week, rows=rows
-    )
+    # Professional HTML board (with movement arrows + real logos); Pillow
+    # rankings card as the automatic fallback.
+    srows = []
+    for r in rows:
+        try:
+            logo = logos.logo_data_uri(r["team"])
+        except Exception:  # noqa: BLE001
+            logo = None
+        srows.append({
+            "rank": r["rank"], "team": r["team"], "wins": r.get("wins", 0),
+            "losses": r.get("losses", 0), "points": round(r.get("points_for", 0), 1),
+            "arrow": r.get("arrow"), "logo": logo,
+        })
+    html = templates.standings_html("POWER RANKINGS", f"WEEK {week}", srows)
+    image_path = html_render.render_html(html, os.path.join(out_dir, f"rankings_w{week}.png"))
+    if image_path is None:
+        image_path = render_rankings_card(out_dir=out_dir, name=f"rankings_w{week}", week=week, rows=rows)
     return {"blurb": blurb, "image_path": image_path}

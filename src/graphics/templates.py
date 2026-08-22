@@ -43,6 +43,19 @@ def theme(team: str) -> tuple[str, str]:
     return _FALLBACK[h % len(_FALLBACK)]
 
 
+def _fit(text: str, big: int, mid: int, small: int, tiny: int) -> int:
+    """Pick a font size from text length so headlines never overflow or get
+    visually truncated."""
+    n = len(text or "")
+    if n <= 22:
+        return big
+    if n <= 40:
+        return mid
+    if n <= 62:
+        return small
+    return tiny
+
+
 def initials(name: str) -> str:
     words = [w for w in "".join(c if c.isalnum() or c.isspace() else " " for c in (name or "")).split() if w]
     if not words:
@@ -259,36 +272,90 @@ def stat_leader_html(kicker, team, value, label, sub, ghost="MVP", logo=None, he
 
 
 def breaking_html(headline, team="", logo=None, hero=None) -> str:
-    """An Insider 'breaking news' poster: red BREAKING flag, big headline,
-    team logo/crest + player hero when known, Dianna byline."""
+    """An Insider 'breaking news' poster: red BREAKING flag, an auto-fit
+    headline in a fixed upper band, a centered player hero, a small team crest,
+    and a grounding scrim + byline. Balanced and consistent every time."""
     p, s = theme(team) if team else ("#c81e33", "#4a0c14")
-    # Show EITHER a player hero (bottom-right, behind text) OR a small team
-    # crest (top-right) — never both, and keep the headline clear of it.
-    if hero:
-        subject = _hero(hero, "right:-20px;bottom:0;height:700px")
-        badge = f"<div style='position:absolute;top:74px;right:60px;z-index:4'>{_crest(team,logo,110,18)}</div>" if team else ""
-    else:
-        subject = ""
-        badge = f"<div style='position:absolute;top:250px;right:60px;z-index:4'>{_crest(team,logo,170,24)}</div>" if team else ""
-    hl_right = 300 if (badge and not hero) else 60
+    fs = _fit(headline, 78, 64, 52, 44)
+    crest = (f"<div style='position:absolute;top:64px;right:56px;z-index:6'>{_crest(team,logo,120,20)}</div>"
+             if team else "")
+    subject = _hero(hero, "left:50%;transform:translateX(-50%);bottom:0;height:660px") if hero else ""
     css = f"""
     #card{{width:1080px;height:1080px;position:relative;overflow:hidden;color:#fff;
       background:linear-gradient(150deg,{s} 0%,#090e18 55%,#05080f 100%)}}
-    .flag{{position:absolute;top:70px;left:60px;background:linear-gradient(180deg,#ff3b3b,#b3121a);
-      font-size:38px;letter-spacing:4px;padding:12px 30px;border-radius:10px;z-index:5;
+    .flag{{position:absolute;top:66px;left:60px;background:linear-gradient(180deg,#ff3b3b,#b3121a);
+      font-size:36px;letter-spacing:4px;padding:12px 30px;border-radius:10px;z-index:6;
       box-shadow:0 10px 30px rgba(220,20,20,.5)}}
-    .src{{position:absolute;top:152px;left:64px;font-size:30px;letter-spacing:5px;color:{GOLD};z-index:5}}
-    .hl{{position:absolute;left:60px;right:{hl_right}px;top:330px;font-size:88px;line-height:.98;
-      text-transform:uppercase;z-index:5;text-shadow:0 6px 30px rgba(0,0,0,.8)}}
-    .by{{position:absolute;bottom:56px;left:64px;font-size:32px;font-weight:600;color:#cdd8f2;z-index:5;
-      text-shadow:0 2px 12px rgba(0,0,0,.9)}}
+    .src{{position:absolute;top:146px;left:64px;font-size:28px;letter-spacing:5px;color:{GOLD};z-index:6}}
+    .hl{{position:absolute;left:60px;right:60px;top:250px;height:250px;display:flex;align-items:flex-start;
+      font-size:{fs}px;line-height:1.0;text-transform:uppercase;z-index:6;text-shadow:0 6px 30px rgba(0,0,0,.9)}}
+    .scrim{{position:absolute;left:0;right:0;bottom:0;height:260px;z-index:5;
+      background:linear-gradient(to top,#05080f 8%,transparent)}}
+    .by{{position:absolute;bottom:52px;left:64px;font-size:30px;font-weight:600;color:#dfe6f7;z-index:6}}
     """
     inner = f"""<div id=card>
       <div class=spot style="left:-120px;top:-80px;width:520px;height:520px;background:{p}66"></div>
-      {_shards(p,s)}{subject}<div class=grain></div><div class=vig></div>{badge}
+      {_shards(p,s)}{subject}<div class=grain></div><div class=vig></div><div class=scrim></div>{crest}
       <div class='flag num'>BREAKING</div><div class='src cond'>THE INSIDER</div>
       <div class='hl num'>{headline}</div>
       <div class='by cond'>Dianna Russinni · @DiannaRussinni</div></div>"""
+    return _doc(inner, css)
+
+
+def standings_html(title, subtitle, rows) -> str:
+    """A professional standings / power-rankings board: header + a clean column
+    of team rows (rank, crest, name, record, points), team-colored accents,
+    medals for the top three. rows: [{rank, team, wins, losses, points,
+    logo?, arrow?}]."""
+    n = max(len(rows), 1)
+    row_h, gap, top = 104, 14, 300
+    height = top + n * (row_h + gap) + 60
+    medal = {1: "#ffce4d", 2: "#cfd6e6", 3: "#e0904d"}
+
+    row_html = []
+    for r in rows:
+        p, s = theme(r["team"])
+        rc = medal.get(r["rank"], "#8fa0c4")
+        logo = r.get("logo")
+        crest = (f"<div style=\"width:60px;height:60px;border-radius:12px;flex:0 0 auto;"
+                 f"background:#0a0f1a center/cover no-repeat url('{logo}')\"></div>" if logo else
+                 f"<div class=num style=\"width:60px;height:60px;border-radius:12px;flex:0 0 auto;display:flex;"
+                 f"align-items:center;justify-content:center;font-size:26px;background:linear-gradient(145deg,{p},{s})\">"
+                 f"{initials(r['team'])}</div>")
+        arrow = ""
+        a = r.get("arrow")
+        if a == "up":
+            arrow = "<span style='color:#33d17a;font-size:26px;margin-left:10px'>&#9650;</span>"
+        elif a == "down":
+            arrow = "<span style='color:#e0533d;font-size:26px;margin-left:10px'>&#9660;</span>"
+        row_html.append(
+            f"<div class=r style='border-left:9px solid {p}'>"
+            f"<div class='rk num' style='color:{rc}'>{r['rank']}</div>{crest}"
+            f"<div class='nm cond'>{r['team']}{arrow}</div>"
+            f"<div class='rec cond'>{r.get('wins',0)}-{r.get('losses',0)}</div>"
+            f"<div class='pf num'>{r.get('points','')}</div></div>"
+        )
+
+    css = f"""
+    #card{{width:1080px;height:{height}px;position:relative;overflow:hidden;color:#fff;
+      background:radial-gradient(circle at 50% 0%,#16224a 0%,#0a0f1a 55%,#05080f 100%)}}
+    .head{{position:absolute;top:56px;width:100%;text-align:center;z-index:4}}
+    .kick{{font-size:26px;letter-spacing:5px;color:#8fa0c4}}
+    .title{{font-size:76px;letter-spacing:1px;margin-top:2px}}
+    .sub{{font-size:30px;font-weight:700;letter-spacing:6px;color:{GOLD};margin-top:4px}}
+    .list{{position:absolute;top:{top}px;left:56px;right:56px;z-index:4}}
+    .r{{display:flex;align-items:center;gap:22px;height:{row_h}px;margin-bottom:{gap}px;padding:0 26px;
+      background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:16px}}
+    .rk{{width:56px;font-size:44px;text-align:center;flex:0 0 auto}}
+    .nm{{flex:1;font-size:40px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+    .rec{{font-size:32px;font-weight:600;color:#9fb4e6;flex:0 0 auto;width:120px;text-align:right}}
+    .pf{{font-size:38px;color:{GOLD};flex:0 0 auto;width:150px;text-align:right}}
+    """
+    inner = (f"<div id=card><div class=grain></div>"
+             f"<div class=head><div class='kick cond'>FANTASY MEDIA RESEARCH</div>"
+             f"<div class='title num'>{title}</div><div class='sub cond'>{subtitle}</div></div>"
+             f"<div class=list>{''.join(row_html)}</div></div>")
     return _doc(inner, css)
 
 

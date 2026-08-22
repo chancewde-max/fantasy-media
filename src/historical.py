@@ -15,6 +15,7 @@ from __future__ import annotations
 import itertools
 import logging
 import os
+import re
 
 from . import league_history, lore
 from .generators.claude_client import ClaudeClient
@@ -34,7 +35,7 @@ from .supabase_writer import SupabaseError, SupabaseWriter
 log = logging.getLogger(__name__)
 
 OUT_DIR = "out"
-BACKFILL_VERSION = "v4"
+BACKFILL_VERSION = "v5"
 
 
 def _graphic(html: str, name: str, fallback) -> str:
@@ -112,9 +113,12 @@ def _publish_season(claude: ClaudeClient, supabase: SupabaseWriter, year: int, t
         sfacts = f"{year} final standings: " + ", ".join(
             f"{r['rank']}. {r['team']} ({r['wins']}-{r['losses']})" for r in rows)
         scap = claude.generate(INSTAGRAM_SYSTEM, f"{sfacts} Write the caption.", tone, max_tokens=200)
-        simg = render_power_rankings(OUT_DIR, f"hist_{year}_standings",
-                                     title="FINAL STANDINGS", subtitle=f"{year} SEASON",
-                                     rows=rows, show_arrows=False)
+        srows = [{**r, "logo": _logo(r["team"])} for r in rows]
+        shtml = templates.standings_html("FINAL STANDINGS", f"{year} SEASON", srows)
+        simg = _graphic(shtml, f"hist_{year}_standings",
+                        lambda: render_power_rankings(OUT_DIR, f"hist_{year}_standings",
+                                                      title="FINAL STANDINGS", subtitle=f"{year} SEASON",
+                                                      rows=rows, show_arrows=False))
         _publish(claude, supabase, "instagram", scap, "@LeagueGram",
                  event_key=f"hist:{BACKFILL_VERSION}:{year}:standings",
                  when=f"{year + 1}-01-06T12:00:00+00:00", tone=tone, image_path=simg)
@@ -181,9 +185,14 @@ def _top_rivalries(year: int, n: int = 2) -> list[tuple[str, str, str]]:
     return [(ta, tb, note) for _, _, ta, tb, note in scored[:n]]
 
 
-def _short(text: str, words: int = 9) -> str:
-    parts = text.replace("In the", "").split()
-    return " ".join(parts[:words]).rstrip(",.") if len(parts) > words else text.rstrip(".")
+def _short(text: str, max_chars: int = 92) -> str:
+    """A clean breaking-headline: drop a trailing score and trim at a word
+    boundary so names are never cut mid-word (e.g. no '...OVER NEED')."""
+    t = re.sub(r",?\s*\d+(\.\d+)?\s*-\s*\d+(\.\d+)?\.?\s*$", "", (text or "").strip())
+    t = t.replace("In the", "").strip().rstrip(".")
+    if len(t) > max_chars:
+        t = t[:max_chars].rsplit(" ", 1)[0] + "…"
+    return t
 
 
 def _publish(
