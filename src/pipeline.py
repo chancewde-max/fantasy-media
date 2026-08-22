@@ -296,6 +296,11 @@ class Pipeline:
     def _maybe_send_rankings(self, snap) -> None:
         if not snap.standings:
             return
+        if not _any_games_played(snap.standings):
+            # Before any game is final, every team sits at 0-0 / 0.0 and
+            # "rank" is just ESPN's default team order — nothing to crown
+            # anyone "atop the throne" over yet.
+            return
         week_key = f"{snap.season}:rankings:w{snap.week}"
         if not self.state.is_new(week_key):
             return
@@ -518,6 +523,13 @@ def _team_names_for_event(event) -> list[str]:
     if event.kind in {"high", "low"}:
         return [t for t in (d.get("team"),) if t]
     return []
+
+
+def _any_games_played(standings: list[dict]) -> bool:
+    """True once at least one team has a decided game on record — the signal
+    that standings reflect something real rather than every team starting
+    tied at 0-0 / 0.0."""
+    return any(r.get("wins") or r.get("losses") for r in standings)
 
 
 def _load_prev_standings(season: int):
