@@ -35,7 +35,7 @@ from .supabase_writer import SupabaseError, SupabaseWriter
 log = logging.getLogger(__name__)
 
 OUT_DIR = "out"
-BACKFILL_VERSION = "v5"
+BACKFILL_VERSION = "v6"
 
 
 def _graphic(html: str, name: str, fallback) -> str:

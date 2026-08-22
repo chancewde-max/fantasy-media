@@ -287,8 +287,8 @@ def breaking_html(headline, team="", logo=None, hero=None) -> str:
       font-size:36px;letter-spacing:4px;padding:12px 30px;border-radius:10px;z-index:6;
       box-shadow:0 10px 30px rgba(220,20,20,.5)}}
     .src{{position:absolute;top:146px;left:64px;font-size:28px;letter-spacing:5px;color:{GOLD};z-index:6}}
-    .hl{{position:absolute;left:60px;right:60px;top:250px;height:250px;display:flex;align-items:flex-start;
-      font-size:{fs}px;line-height:1.0;text-transform:uppercase;z-index:6;text-shadow:0 6px 30px rgba(0,0,0,.9)}}
+    .hl{{position:absolute;left:56px;right:56px;top:256px;text-align:center;
+      font-size:{fs}px;line-height:1.04;text-transform:uppercase;z-index:6;text-shadow:0 6px 30px rgba(0,0,0,.9)}}
     .scrim{{position:absolute;left:0;right:0;bottom:0;height:260px;z-index:5;
       background:linear-gradient(to top,#05080f 8%,transparent)}}
     .by{{position:absolute;bottom:52px;left:64px;font-size:30px;font-weight:600;color:#dfe6f7;z-index:6}}
